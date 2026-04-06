@@ -1,0 +1,96 @@
+constellation_name,min_ra,max_ra,min_dec,max_dec,description,pop_rank
+Orion,70.5,96.0,-11.0,23.0,The Hunter,1
+Ursa Major,121.5,216.0,28.8,73.1,Great Bear,2
+Cassiopeia,345.0,360.0,46.0,78.0,Mythological Queen,3
+Cassiopeia,0.0,52.5,46.0,78.0,Mythological Queen,3
+Crux,178.5,193.5,-64.6,-55.6,Southern Cross,4
+Taurus,49.5,90.0,-1.7,31.1,Bull,5
+Ursa Minor,0.0,360.0,65.4,90.0,Lesser Bear (North Pole),6
+Canis Major,91.5,111.0,-33.4,-11.0,Greater Dog,7
+Lyra,273.0,292.5,25.6,47.7,Lyre / Harp,8
+Cygnus,286.5,330.0,27.7,61.6,Swan / Northern Cross,9
+Andromeda,343.5,360.0,21.0,53.0,Princess of Ethiopia,10
+Andromeda,0.0,39.0,21.0,53.0,Princess of Ethiopia,10
+Leo,139.5,178.5,-6.6,33.0,Lion,11
+Gemini,90.0,121.5,9.8,35.4,Twins,12
+Centaurus,166.5,225.0,-64.7,-30.0,Centaur,13
+Pegasus,318.0,360.0,2.5,36.6,Winged Horse,14
+Pegasus,0.0,3.0,2.5,36.6,Winged Horse,14
+Perseus,21.0,72.0,30.9,59.2,Mythological Hero,15
+Scorpius,235.5,268.5,-45.8,-8.1,Scorpion,16
+Virgo,174.0,228.0,-22.7,14.6,Maiden,17
+Sagittarius,265.5,306.0,-45.5,-12.0,Archer,18
+Aquila,279.0,309.0,-11.9,18.7,Eagle,19
+Hercules,237.0,283.5,3.8,51.5,Mythological Hero,20
+Aquarius,309.0,358.5,-25.0,3.3,Water-Bearer,21
+Libra,214.5,238.5,-30.0,-0.4,Balance / Scales,22
+Aries,25.5,52.5,10.6,31.4,Ram,23
+Cancer,118.5,139.5,6.5,33.5,Crab,24
+Pisces,342.0,360.0,-6.0,33.7,Fishes,25
+Pisces,0.0,31.5,-6.0,33.7,Fishes,25
+Capricornus,301.5,328.5,-27.7,-8.6,Sea Goat,26
+Ophiuchus,240.0,280.5,-30.2,14.4,Serpent-Bearer,27
+Hydra,123.0,225.0,-35.6,6.6,Mythological Water Snake,28
+Cetus,358.5,360.0,-24.8,10.5,Sea Monster / Whale,29
+Cetus,0.0,51.0,-24.8,10.5,Sea Monster / Whale,29
+Piscis Austrinus,321.0,346.5,-36.4,-24.8,Southern Fish,30
+Auriga,69.0,112.5,27.9,56.2,Charioteer,31
+Draco,139.5,315.0,47.5,86.0,Dragon,32
+Boötes,202.5,237.0,7.3,55.0,Herdsman,33
+Canis Minor,105.0,121.5,0.0,13.3,Lesser Dog,34
+Eridanus,21.0,76.5,-58.5,0.4,Mythological River,35
+Lupus,213.0,240.0,-55.0,-29.8,Wolf,36
+Carina,90.0,169.5,-75.4,-50.6,Keel,37
+Vela,120.0,166.5,-57.3,-37.2,Sails,38
+Puppis,90.0,126.0,-51.0,-11.0,Poop Deck,39
+Monoceros,88.5,123.0,-11.9,11.9,Unicorn,40
+Cepheus,300.0,360.0,53.0,89.0,Mythological King,41
+Cepheus,0.0,120.0,53.0,89.0,Mythological King,41
+Phoenix,351.0,360.0,-57.8,-39.3,Phoenix,42
+Phoenix,0.0,36.0,-57.8,-39.3,Phoenix,42
+Grus,321.0,351.0,-57.5,-36.5,Crane (bird),43
+Tucana,331.5,360.0,-75.6,-56.5,Toucan,44
+Tucana,0.0,21.0,-75.6,-56.5,Toucan,44
+Pavo,264.0,322.5,-75.4,-56.9,Peacock,45
+Indus,306.0,351.0,-74.4,-44.5,Indian,46
+Columba,75.0,99.0,-43.1,-27.1,Dove,47
+Lepus,76.5,93.0,-27.3,-11.0,Hare,48
+Corvus,178.5,193.5,-25.2,-11.4,Crow,49
+Crater,162.0,178.5,-25.2,-6.4,Cup,50
+Corona Borealis,228.0,246.0,25.9,39.8,Northern Crown,51
+Corona Australis,268.5,289.5,-45.5,-36.8,Southern Crown,52
+Delphinus,303.0,316.5,8.6,20.8,Dolphin,53
+Serpens,226.5,283.5,-16.2,25.6,Snake,54
+Scutum,274.5,283.5,-15.9,-3.8,Shield,55
+Sagitta,283.5,304.5,16.1,21.3,Arrow,56
+Equuleus,316.5,321.0,2.4,13.0,Pony,57
+Vulpecula,283.5,322.5,19.4,29.4,Little Fox,58
+Lacerta,328.5,343.5,34.8,57.0,Lizard,59
+Lynx,93.0,145.5,32.8,61.9,Lynx,60
+Camelopardalis,48.0,217.5,52.3,86.0,Giraffe,61
+Leo Minor,139.5,166.5,22.8,41.5,Lesser Lion,62
+Canes Venatici,181.5,211.5,27.8,52.6,Hunting Dogs,63
+Coma Berenices,178.5,204.0,13.5,33.5,Berenice's Hair,64
+Sextans,144.0,162.0,-11.6,6.9,Sextant,65
+Pyxis,126.0,141.0,-37.3,-17.6,Mariner's Compass,66
+Antlia,141.0,166.5,-40.5,-24.0,Air Pump,67
+Caelum,64.5,75.0,-48.7,-35.0,Chisel,68
+Sculptor,346.5,360.0,-39.6,-24.8,Sculptor's Studio,69
+Sculptor,0.0,27.0,-39.6,-24.8,Sculptor's Studio,69
+Fornax,25.5,57.0,-39.5,-23.8,Chemical Furnace,70
+Horologium,33.0,64.5,-67.0,-39.6,Pendulum Clock,71
+Reticulum,48.0,69.0,-68.8,-52.4,Eyepiece Graticule,72
+Pictor,67.5,102.0,-64.2,-42.8,Painter's Easel,73
+Dorado,58.5,99.0,-70.1,-48.7,Mahi-Mahi / Dolphinfish,74
+Mensa,48.0,114.0,-85.4,-69.8,Table Mountain,75
+Volans,93.0,135.0,-75.4,-64.1,Flying Fish,76
+Chamaeleon,112.5,207.0,-83.0,-75.4,Chameleon,77
+Musca,169.5,207.0,-75.4,-64.1,Fly,78
+Apus,207.0,276.0,-83.1,-67.5,Bird-of-Paradise,79
+Octans,0.0,360.0,-90.0,-74.3,Octant (South Pole),80
+Hydrus,1.5,69.0,-82.1,-57.8,Lesser Water Snake,81
+Triangulum,22.5,42.0,29.8,37.5,Triangle,82
+Triangulum Australe,223.5,258.0,-70.5,-60.4,Southern Triangle,83
+Circinus,204.0,232.5,-70.6,-55.4,Compasses,84
+Norma,228.0,247.5,-60.4,-42.4,Carpenter's Level,85
+Telescopium,271.5,306.0,-57.0,-45.1,Telescope,86
