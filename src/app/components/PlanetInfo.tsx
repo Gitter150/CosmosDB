@@ -18,7 +18,7 @@ interface PlanetInfoProps {
 
 export function PlanetInfo({ planetData }: PlanetInfoProps) {
   return (
-    <div className="flex flex-col h-full justify-center pl-16 md:pl-24 max-w-2xl font-sans text-white relative">
+    <div className="flex flex-col pl-16 md:pl-24 max-w-2xl font-sans text-white relative">
       <div className="flex flex-col gap-10 w-full">
         {/* Header */}
         <div>

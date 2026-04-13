@@ -1,23 +1,5 @@
 import { useEffect, useRef } from "react";
 
-/** 
- * Central Star Temperature in Kelvin.
- * 500   - 2,000K:  Brown Dwarfs (Magenta/Deep Red)
- * 2,500 - 4,000K:  Red Dwarfs / M-type
- * 5,800K:           Yellow (Sun-like / G-type) 
- * 10,000K+:         Blue / O/B-type
- * 30,000 - 50,000K: Hyper-Hot (Violet-Blue)
- */
-const STAR_TEMP_K = 5000;
-
-/** Total stars in the system (1 host + N-1 companions rendered in background) */
-const NUM_STARS = 2;
-
-/** Planet Physical Properties */
-const PLANET_TYPE: "Solid" | "Gas" = "Solid";
-const PLANET_TEMP_K = 2; // e.g. 265 for habitable, 2 for freezing barrent rock, >900 for lava.
-const PLANET_IS_HABITABLE = false; // Set to true to render oceans/continents/atmosphere on solid planets.
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface StarPalette {
@@ -139,12 +121,25 @@ const COMPANION_SEEDS: Array<{
   ];
 
 interface OrbitVisualizerProps {
-  /** Legacy prop kept for API compatibility; actual color is driven by STAR_COLOR constant above. */
-  starColor?: string;
-  planetColor?: string;
+  /** Star effective temperature in Kelvin (drives color palette). Defaults to 5800 (Sun-like). */
+  starTempK?: number;
+  /** Total stars in the system (1 host + N-1 companions). Defaults to 1. */
+  numStars?: number;
+  /** Planet physical classification. Defaults to "Solid". */
+  planetType?: "Solid" | "Gas";
+  /** Planet equilibrium temperature in Kelvin (drives surface texture). Defaults to 300. */
+  planetTempK?: number;
+  /** Whether the planet is in the habitable zone (renders oceans/atmosphere on solid planets). */
+  isHabitable?: boolean;
 }
 
-export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetColor }: OrbitVisualizerProps) {
+export function OrbitVisualizer({
+  starTempK = 5800,
+  numStars = 1,
+  planetType = "Solid",
+  planetTempK = 300,
+  isHabitable = false,
+}: OrbitVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
 
@@ -155,12 +150,12 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const palette = getStarPalette(STAR_TEMP_K);
-    const numCompanions = Math.max(0, NUM_STARS - 1);
+    const palette = getStarPalette(starTempK);
+    const numCompanions = Math.max(0, numStars - 1);
 
     // Predetermine palettes for companions once
     const companionPalettes = COMPANION_SEEDS.map(seed =>
-      getStarPalette(STAR_TEMP_K + seed.tempOffset)
+      getStarPalette(starTempK + seed.tempOffset)
     );
 
     // ── Offscreen star-field canvas (drawn once, blit every frame) ────────────
@@ -375,7 +370,7 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
       const pr = getDPR();
 
       // Scale radius based on gas giants vs solid
-      const baseR = (PLANET_TYPE === "Gas" ? 22 : 14) * pr;
+      const baseR = (planetType === "Gas" ? 22 : 14) * pr;
 
       const scale = 1 + depth * 0.4;
       const radius = baseR * scale;
@@ -387,9 +382,9 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
       const uy = dy / dist;
 
       // Classify the texture style
-      const texType = PLANET_TYPE === "Gas"
-        ? (PLANET_TEMP_K > 800 ? "puffy_jupiter" : "ice_gas")
-        : (PLANET_TEMP_K > 900 ? "lava_rock" : (PLANET_IS_HABITABLE ? "earth_like" : "barren_rock"));
+      const texType = planetType === "Gas"
+        ? (planetTempK > 800 ? "puffy_jupiter" : "ice_gas")
+        : (planetTempK > 900 ? "lava_rock" : (isHabitable ? "earth_like" : "barren_rock"));
 
       // Set up clipping mask for the sphere surface
       ctx.save();
@@ -435,7 +430,7 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
         ctx.fill();
       } else if (texType === "barren_rock") {
         // Frosty/icy base for cold worlds, gray/brown for generic barren
-        ctx.fillStyle = PLANET_TEMP_K < 200 ? "#b0c4de" : "#8c8273";
+        ctx.fillStyle = planetTempK < 200 ? "#b0c4de" : "#8c8273";
         ctx.fill();
         // Craters and rough surface texture mapping
         const craterGrad = ctx.createRadialGradient(x - radius * 0.2, y + radius * 0.1, 0, x, y, radius);
@@ -483,9 +478,9 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
       ctx.restore(); // Remove clipping mask
 
       // 3. Atmosphere layer (Outside the solid body)
-      if (texType === "earth_like" || PLANET_TYPE === "Gas") {
+      if (texType === "earth_like" || planetType === "Gas") {
         ctx.beginPath();
-        const atmosSize = PLANET_TYPE === "Gas" ? 1.08 : 1.15; // Gas giants have thinner relative visual atmospheres
+        const atmosSize = planetType === "Gas" ? 1.08 : 1.15; // Gas giants have thinner relative visual atmospheres
         ctx.arc(x, y, radius * atmosSize, 0, Math.PI * 2);
         const atmosColor = texType === "earth_like" ? "100,180,255" : (texType === "ice_gas" ? "150,220,255" : "255,180,120");
         const atmosGrad = ctx.createRadialGradient(x, y, radius * 0.8, x, y, radius * atmosSize);
@@ -537,10 +532,8 @@ export function OrbitVisualizer({ starColor: _starColor, planetColor: _planetCol
       resizeObserver.disconnect();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-    // Re-run only if NUM_STARS or STAR_COLOR constants change (they're module-level,
-    // so in practice this runs once on mount).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // Re-run whenever the data-driven props change (different system / planet selected)
+  }, [starTempK, numStars, planetType, planetTempK, isHabitable]);
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-black">

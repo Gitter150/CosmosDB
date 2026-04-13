@@ -1,3 +1,35 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* Star-field ambient background */
+.star-field {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.15), transparent),
+    radial-gradient(1px 1px at 30% 65%, rgba(255,255,255,0.08), transparent),
+    radial-gradient(1px 1px at 55% 15%, rgba(255,255,255,0.12), transparent),
+    radial-gradient(1px 1px at 70% 40%, rgba(255,255,255,0.06), transparent),
+    radial-gradient(1px 1px at 85% 75%, rgba(255,255,255,0.10), transparent),
+    radial-gradient(1px 1px at 45% 90%, rgba(255,255,255,0.05), transparent),
+    radial-gradient(600px 600px at 50% 50%, rgba(245,158,11,0.015), transparent);
+}
+
+/* Scrollbar */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+}
+
+/* Full height for system view */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}

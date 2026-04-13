@@ -41,6 +41,8 @@ CREATE TABLE Constellation (
 CREATE TABLE StarSystem (
     system_id INT AUTO_INCREMENT PRIMARY KEY,
     system_name VARCHAR(255) UNIQUE NOT NULL,
+    `ra` FLOAT CHECK (`ra` BETWEEN 0 AND 360 OR `ra` IS NULL),
+    `dec` FLOAT CHECK (`dec` BETWEEN -90 AND 90 OR `dec` IS NULL),
     num_stars INT DEFAULT 1 CHECK (num_stars > 0),
     num_planets INT DEFAULT 1 CHECK (num_planets > 0),
     num_moons INT DEFAULT 0 CHECK (num_moons >= 0),
