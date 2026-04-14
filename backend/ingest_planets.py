@@ -58,7 +58,7 @@ def main():
         return
 
     try:
-        csv_path = "../data/exoplanets.csv"
+        csv_path = "./data/ExoplanetDataset.csv"
         if not os.path.exists(csv_path):
             csv_path = "../data/ExoplanetDataset.csv"
             

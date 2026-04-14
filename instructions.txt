@@ -1,0 +1,35 @@
+USE POWERSHELL FOR EVERY TERMINAL
+FIRST HAVE A ROOT ACCOUNT FOR MYSQL. HAVE YOUR PASSWORD READY.
+
+EDIT THE .env.example FILE IN THE ROOT DIRECTORY TO MATCH YOUR MYSQL ROOT PASSWORD.
+COPY THE .env.example FILE INTO ANOTHER FILE CALLED .env
+
+First run this in terminal 1:
+    python -m venv venv && .\venv\Scripts\python.exe -m pip install -r requirements.txt && npm install && .\venv\Scripts\activate
+
+Then run this in terminal 2:
+    mysql-start
+
+Then in the same terminal 2 after getting MYSQL prompt:
+    CREATE DATABASE CosmosDB;
+    USE CosmosDB;
+    \source SQL/schema.sql
+
+WAIT for the terminal 1 to finish installing all dependencies (Takes 10 minutes)
+THEN run this in terminal 1:
+    python backend/ingestConstellation.py
+    python backend/ingest_planets.py
+
+THAT'S ALL for setting up the database.
+
+THEN, when you have to run the project, run this in terminal 1:
+    .\venv\Scripts\activate && cd backend && fastapi dev
+    
+AND run this in terminal 2:
+    mysql-start CosmosDB
+
+AND run this in terminal 3:
+    npm run dev
+THEN OPEN http://localhost:5173/ IN YOUR BROWSER. ENJOY!
+
+
