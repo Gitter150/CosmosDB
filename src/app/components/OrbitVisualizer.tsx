@@ -131,6 +131,8 @@ interface OrbitVisualizerProps {
   planetTempK?: number;
   /** Whether the planet is in the habitable zone (renders oceans/atmosphere on solid planets). */
   isHabitable?: boolean;
+  /** Whether the planet is circumbinary (orbits two stars). */
+  isCircumbinary?: boolean;
 }
 
 export function OrbitVisualizer({
@@ -139,6 +141,7 @@ export function OrbitVisualizer({
   planetType = "Solid",
   planetTempK = 300,
   isHabitable = false,
+  isCircumbinary = false,
 }: OrbitVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
@@ -550,6 +553,18 @@ export function OrbitVisualizer({
             "radial-gradient(circle at 70% 50%, transparent 20%, rgba(0,0,0,0.4) 100%)",
         }}
       />
+      
+      {isCircumbinary && (
+        <div className="absolute top-16 right-16 z-20 flex flex-col items-end gap-3 pointer-events-none">
+            <div className="px-5 py-2 bg-amber-500/10 border border-amber-500/30 rounded-full text-[11px] text-amber-400 uppercase tracking-[0.25em] animate-pulse shadow-[0_0_30px_rgba(245,158,11,0.2)] backdrop-blur-sm flex items-center gap-2">
+               <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_5px_#fbbf24]"></span>
+               Multiple Star Orbit
+            </div>
+            <p className="text-[10px] text-amber-500/60 uppercase tracking-widest max-w-[200px] text-right font-mono">
+               Sensors indicate this body orbits multiple host stars simultaneously.
+            </p>
+        </div>
+      )}
     </div>
   );
 }

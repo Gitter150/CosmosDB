@@ -29,6 +29,7 @@ interface PlanetData {
   discovery_year: number | null;
   discovery_method: string | null;
   discovery_facility: string | null;
+  is_circumbinary: boolean | number | null;
 }
 
 interface SystemData {
@@ -38,7 +39,7 @@ interface SystemData {
   dec: number | null;
   num_stars: number;
   num_planets: number;
-  distance_pc: number | null;
+  distance_ly: number | null;
   constellation_name: string | null;
   stars: StarData[];
   planets: PlanetData[];
@@ -126,8 +127,8 @@ export default function SystemView() {
         orbitalPeriod: planet.orbital_period
           ? `${planet.orbital_period.toFixed(1)} days`
           : "—",
-        distance: system.distance_pc
-          ? `${system.distance_pc.toFixed(1)} pc`
+        distance: system.distance_ly
+          ? `${system.distance_ly.toFixed(1)} ly`
           : "—",
         temperature: planet.planet_temp
           ? `${Math.round(planet.planet_temp)} K`
@@ -154,6 +155,7 @@ export default function SystemView() {
             planet.planet_temp <= 320 &&
             (planet.radius_earth ? planet.radius_earth < 2.5 : false)
           }
+          isCircumbinary={!!planet?.is_circumbinary}
         />
       </div>
 

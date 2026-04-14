@@ -58,7 +58,7 @@ def _load_dataframe() -> pd.DataFrame:
             p.planet_density, p.planet_temp, p.orbit_radius, p.orbital_period,
             p.eccentricity, p.insolation_flux, p.is_circumbinary,
             s.system_id, s.system_name, s.num_stars, s.num_planets,
-            s.num_moons, s.distance_pc,
+            s.num_moons, s.distance_ly,
             c.constellation_id, c.constellation_name,
             d.discovery_id, d.discovery_year, d.discovery_method,
             d.discovery_locale, d.discovery_facility,
@@ -295,7 +295,7 @@ def metallicity_planets():
 @router.get("/distance-histogram")
 def distance_histogram():
     df = _load_dataframe()
-    sub = df[df["distance_pc"].notna()]["distance_pc"].values
+    sub = df[df["distance_ly"].notna()]["distance_ly"].values
     if len(sub) == 0:
         return {"bins": [], "counts": []}
 

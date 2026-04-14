@@ -13,7 +13,7 @@ interface PlanetRow {
   orbit_radius: number | null;
   system_name: string;
   system_id: number;
-  distance_pc: number | null;
+  distance_ly: number | null;
   constellation_name: string | null;
   discovery_method: string | null;
   discovery_year: number | null;
@@ -299,7 +299,7 @@ export default function Observatory() {
                     <div>
                       <span className="text-white/25">Dist</span>
                       <span className="ml-1.5 text-white/60">
-                        {na(p.distance_pc, " pc")}
+                        {na(p.distance_ly, " ly")}
                       </span>
                     </div>
                   </div>

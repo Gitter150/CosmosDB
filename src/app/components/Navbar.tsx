@@ -1,14 +1,34 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 const TABS = [
   { label: "Home", path: "/" },
   { label: "Observatory", path: "/observatory" },
   { label: "Analytics", path: "/analytics" },
+  { label: "Add Planet", path: "/add-planet" },
 ] as const;
 
 export default function Navbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [resetStatus, setResetStatus] = useState("Master Reset");
+  
+  const handleReset = async () => {
+    if(resetStatus === "Deleting...") return;
+    if(!window.confirm("CRITICAL WARNING: This will TRUNCATE ALL TABLES and re-run ingestion from scratch. Action cannot be undone. Execute database wipe?")) return;
+    setResetStatus("Deleting...");
+    try {
+        const res = await fetch("http://localhost:8000/api/admin/reset", {method: "POST"});
+        if (res.ok) {
+            setResetStatus("Successfully Deleted");
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            setResetStatus("Error");
+        }
+    } catch(err) {
+        setResetStatus("Error");
+    }
+  };
 
   // Hide navbar on full-screen views (system visualizer, planet detail)
   const hideOn = ["/system/", "/planet/"];
@@ -63,7 +83,9 @@ export default function Navbar() {
         </div>
 
         {/* Spacer for symmetry */}
-        <div className="w-24" />
+        <div className="w-24">
+           <button onClick={handleReset} className="text-[10px] text-red-500 bg-red-500/10 hover:bg-red-500/20 px-3 py-1 rounded cursor-pointer transition-colors whitespace-nowrap border border-red-500/20">{resetStatus}</button>
+        </div>
       </div>
     </nav>
   );

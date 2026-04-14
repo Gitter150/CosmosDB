@@ -5,6 +5,7 @@ import mysql.connector
 from dotenv import load_dotenv
 from utils import calculate_esi
 from analytics import router as analytics_router
+from crud import router as admin_router, crud_router
 
 load_dotenv()
 # If .env not found in current dir (e.g. running from /backend), try one level up
@@ -22,6 +23,8 @@ app.add_middleware(
 )
 
 app.include_router(analytics_router)
+app.include_router(admin_router)
+app.include_router(crud_router)
 
 def get_db():
     host = os.getenv("MYSQL_HOST", "127.0.0.1")
@@ -41,7 +44,7 @@ def get_db():
 @app.get("/api/systems")
 def list_systems(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=5000),
     constellation: str | None = Query(None),
 ):
     db = get_db()
@@ -68,7 +71,7 @@ def list_systems(
     cur.execute(
         f"""
         SELECT s.system_id, s.system_name, s.ra, s.`dec`, s.num_stars, s.num_planets,
-               s.num_moons, s.distance_pc,
+               s.num_moons, s.distance_ly,
                c.constellation_name
         FROM starsystem s
         LEFT JOIN constellation c ON s.constellation_id = c.constellation_id
@@ -173,7 +176,7 @@ def search_systems(q: str = Query(..., min_length=1)):
     pattern = f"%{q}%"
     cur.execute(
         """
-        SELECT s.system_id, s.system_name, s.num_planets, s.distance_pc,
+        SELECT s.system_id, s.system_name, s.num_planets, s.distance_ly,
                c.constellation_name
         FROM starsystem s
         LEFT JOIN constellation c ON s.constellation_id = c.constellation_id
@@ -247,7 +250,7 @@ def list_planets(
         "mass": "p.mass_earth",
         "radius": "p.radius_earth",
         "temp": "p.planet_temp",
-        "distance": "s.distance_pc",
+        "distance": "s.distance_ly",
         "name": "p.planet_name",
         "esi_score": "p.planet_name",  # ESI is computed in Python; fallback sort
     }
@@ -261,7 +264,7 @@ def list_planets(
             SELECT p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
                    p.planet_density, p.planet_temp, p.orbit_radius, p.orbital_period,
                    p.eccentricity, p.insolation_flux,
-                   s.system_id, s.system_name, s.distance_pc, s.num_planets,
+                   s.system_id, s.system_name, s.distance_ly, s.num_planets,
                    c.constellation_name,
                    d.discovery_method, d.discovery_year,
                    ANY_VALUE(st.star_temp)       AS star_temp,
@@ -277,7 +280,7 @@ def list_planets(
             GROUP BY p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
                      p.planet_density, p.planet_temp, p.orbit_radius, p.orbital_period,
                      p.eccentricity, p.insolation_flux,
-                     s.system_id, s.system_name, s.distance_pc, s.num_planets,
+                     s.system_id, s.system_name, s.distance_ly, s.num_planets,
                      c.constellation_name,
                      d.discovery_method, d.discovery_year
             """,
@@ -323,7 +326,7 @@ def list_planets(
         SELECT p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
                p.planet_density, p.planet_temp, p.orbit_radius, p.orbital_period,
                p.eccentricity, p.insolation_flux,
-               s.system_id, s.system_name, s.distance_pc, s.num_planets,
+               s.system_id, s.system_name, s.distance_ly, s.num_planets,
                c.constellation_name,
                d.discovery_method, d.discovery_year,
                ANY_VALUE(st.star_temp)       AS star_temp,
@@ -339,7 +342,7 @@ def list_planets(
         GROUP BY p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
                  p.planet_density, p.planet_temp, p.orbit_radius, p.orbital_period,
                  p.eccentricity, p.insolation_flux,
-                 s.system_id, s.system_name, s.distance_pc, s.num_planets,
+                 s.system_id, s.system_name, s.distance_ly, s.num_planets,
                  c.constellation_name,
                  d.discovery_method, d.discovery_year
         ORDER BY {order_col} IS NULL, {order_col} {order_dir}
@@ -378,7 +381,7 @@ def get_planet_details(planet_id: int):
         """
         SELECT p.*,
                s.system_name, s.ra AS system_ra, s.`dec` AS system_dec,
-               s.num_stars, s.num_planets, s.num_moons, s.distance_pc,
+               s.num_stars, s.num_planets, s.num_moons, s.distance_ly,
                c.constellation_id, c.constellation_name,
                st.star_id, st.star_name, st.spectral_type, st.star_temp, st.star_radius,
                st.star_mass, st.star_metallicity, st.star_luminosity, st.star_gravity,

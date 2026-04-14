@@ -10,7 +10,7 @@ discovery_year, discovery_method, discovery_locale, discovery_facility, discover
 Table: system
 system_id (PK)
 system_name (Unique - e.g., "Kepler-16")
-num_stars, num_planets, num_moons,distance_pc
+num_stars, num_planets, num_moons, distance_ly
 constellation_id (FK)
 
 Table: star
@@ -44,9 +44,9 @@ CREATE TABLE StarSystem (
     `ra` DOUBLE CHECK (`ra` BETWEEN 0 AND 360 OR `ra` IS NULL),
     `dec` DOUBLE CHECK (`dec` BETWEEN -90 AND 90 OR `dec` IS NULL),
     num_stars INT DEFAULT 1 CHECK (num_stars > 0),
-    num_planets INT DEFAULT 1 CHECK (num_planets > 0),
+    num_planets INT DEFAULT 1 CHECK (num_planets >= 0),
     num_moons INT DEFAULT 0 CHECK (num_moons >= 0),
-    distance_pc DOUBLE CHECK (distance_pc > 0 OR distance_pc is NULL),
+    distance_ly DOUBLE CHECK (distance_ly > 0 OR distance_ly IS NULL),
     constellation_id INT,
     CONSTRAINT fk_constellation
         FOREIGN KEY (constellation_id)

@@ -524,7 +524,7 @@ export default function Analytics() {
     xAxis: {
       type: "category",
       data: distHist?.bins.map((b) => b.toFixed(0)) || [],
-      name: "Distance (parsecs)",
+      name: "Distance (light-years)",
       nameLocation: "center",
       nameGap: 30,
       nameTextStyle: { color: TEXT_DIM, fontSize: 11 },
@@ -847,7 +847,7 @@ export default function Analytics() {
           <ChartCard
             id="chart-distance"
             title="Galactic Proximity"
-            subtitle="Distance distribution (parsecs)"
+            subtitle="Distance distribution (light-years)"
           >
             <ReactEChartsCore
               echarts={echarts}

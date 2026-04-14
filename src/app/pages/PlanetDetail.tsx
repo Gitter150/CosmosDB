@@ -6,112 +6,60 @@ import ZoneTracker from "../components/ZoneTracker";
 const API = "http://localhost:8000";
 
 const na = (v: any, suffix = ""): string => {
-  if (v === null || v === undefined || (typeof v === "number" && isNaN(v)))
-    return "N/A";
+  if (v === null || v === undefined || (typeof v === "number" && isNaN(v))) return "N/A";
   if (typeof v === "number") return `${v}${suffix}`;
   return `${v}${suffix}`;
 };
 
 const fmt = (v: number | null, decimals = 4, suffix = ""): string => {
-  if (v === null || v === undefined) return "N/A";
+  if (v === null || v === undefined || isNaN(v)) return "N/A";
   return `${v.toFixed(decimals)}${suffix}`;
 };
 
-interface ESIData {
-  star_luminosity: number | null;
-  orbit_distance: number | null;
-  planet_density: number | null;
-  surface_temp: number | null;
-  escape_velocity: number | null;
-  hz_inner: number | null;
-  hz_outer: number | null;
-  is_habitable: boolean;
-  esi_interior: number | null;
-  esi_surface: number | null;
-  base_esi: number | null;
-  final_esi: number | null;
+function calculateESIFrontEnd(planet: any, star: any) {
+  let L = null;
+  if (star.star_luminosity !== null && star.star_luminosity !== undefined) {
+      L = Math.pow(10, parseFloat(star.star_luminosity));
+  } else if (star.star_radius && star.star_temp) {
+      L = Math.pow(star.star_radius, 2) * Math.pow(star.star_temp / 5778.0, 4);
+  }
+
+  const d = planet.orbit_radius || (planet.orbital_period && star.star_mass ? Math.pow(Math.pow(planet.orbital_period / 365.25, 2) * star.star_mass, 1/3) : null);
+  const D = planet.planet_density || (planet.mass_earth && planet.radius_earth ? (planet.mass_earth / Math.pow(planet.radius_earth, 3)) * 5.51 : null);
+  const T = planet.planet_temp || (L && d ? 278.0 * Math.pow(L / Math.pow(d, 2), 0.25) : null);
+  const V = planet.mass_earth && planet.radius_earth ? Math.sqrt(planet.mass_earth / planet.radius_earth) * 11.19 : null;
+
+  const hz_inner = L ? Math.sqrt(L / 1.1) : null;
+  const hz_outer = L ? Math.sqrt(L / 0.53) : null;
+  const is_habitable = hz_inner && hz_outer && d ? (d >= hz_inner && d <= hz_outer) : false;
+
+  let esi_interior = null, esi_surface = null, base_esi = null, final_esi = null;
+  
+  if (planet.radius_earth && D) {
+      const r_term = Math.pow(1 - Math.abs(planet.radius_earth - 1) / (planet.radius_earth + 1), 0.57);
+      const d_term = Math.pow(1 - Math.abs(D - 5.51) / (D + 5.51), 1.07);
+      esi_interior = Math.sqrt(Math.max(0, r_term * d_term));
+  }
+  
+  if (V && T) {
+      const v_term = Math.pow(1 - Math.abs(V - 11.19) / (V + 11.19), 0.70);
+      const t_term = Math.pow(1 - Math.abs(T - 288.0) / (T + 288.0), 5.58);
+      esi_surface = Math.sqrt(Math.max(0, v_term * t_term));
+  }
+  
+  if (esi_interior && esi_surface) {
+      base_esi = Math.sqrt(esi_interior * esi_surface);
+      final_esi = is_habitable ? base_esi : base_esi * 0.1;
+  }
+
+  return { star_luminosity: L, orbit_distance: d, planet_density: D, surface_temp: T, escape_velocity: V, hz_inner, hz_outer, is_habitable, esi_interior, esi_surface, base_esi, final_esi };
 }
 
-interface PlanetDetail {
-  planet_id: number;
-  planet_name: string;
-  system_id: number;
-  system_name: string;
-  system_ra: number | null;
-  system_dec: number | null;
-  num_stars: number;
-  num_planets: number;
-  num_moons: number;
-  distance_pc: number | null;
-  constellation_id: number | null;
-  constellation_name: string | null;
-  // Star
-  star_id: number | null;
-  star_name: string | null;
-  spectral_type: string | null;
-  star_temp: number | null;
-  star_radius: number | null;
-  star_mass: number | null;
-  star_metallicity: number | null;
-  star_luminosity: number | null;
-  star_gravity: number | null;
-  star_age: number | null;
-  star_brightness: number | null;
-  // Planet
-  is_circumbinary: boolean;
-  orbital_period: number | null;
-  orbit_radius: number | null;
-  radius_earth: number | null;
-  mass_earth: number | null;
-  planet_density: number | null;
-  eccentricity: number | null;
-  insolation_flux: number | null;
-  planet_temp: number | null;
-  ttv_obs: boolean;
-  // Discovery
-  discovery_year: number | null;
-  discovery_method: string | null;
-  discovery_locale: string | null;
-  discovery_facility: string | null;
-  discovery_telescope: string | null;
-  discovery_instrument: string | null;
-  // ESI
-  esi: ESIData;
-}
-
-function DataRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-baseline justify-between py-1.5 border-b border-white/[0.04]">
-      <span className="text-[11px] text-white/30 tracking-wider uppercase shrink-0">
-        {label}
-      </span>
-      <span className="text-[13px] text-white/75 text-right ml-4 font-mono">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/** Mini circular breakdown gauge for the ESI composition */
-function MiniGauge({
-  label,
-  score,
-}: {
-  label: string;
-  score: number | null;
-}) {
+function MiniGauge({ label, score }: { label: string; score: number | null }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
       <ESIGauge score={score} size={60} />
-      <span className="text-[10px] text-white/30 tracking-wider uppercase text-center">
-        {label}
-      </span>
+      <span className="text-[10px] text-white/30 tracking-wider uppercase text-center">{label}</span>
     </div>
   );
 }
@@ -119,116 +67,143 @@ function MiniGauge({
 export default function PlanetDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [data, setData] = useState<PlanetDetail | null>(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState<any>(null);
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    setError(false);
     fetch(`${API}/api/planets/${id}/details`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Not found");
-        return r.json();
-      })
-      .then((d) => {
-        setData(d);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError(true);
-        setLoading(false);
-      });
+      .then((r) => { if (!r.ok) throw new Error(""); return r.json(); })
+      .then((d) => { setData(d); setForm(d); setLoading(false); })
+      .catch(() => { setError(true); setLoading(false); });
   }, [id]);
 
-  if (loading) {
+  const handleChange = (e: any) => {
+    let val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    if (e.target.type === "number") val = val ? parseFloat(val) : null;
+    setForm({ ...form, [e.target.name]: val });
+  };
+
+  const handleStep = (name: string, direction: number) => {
+    let val = parseFloat(form[name]);
+    if (isNaN(val)) val = 0;
+    let step = 0.1;
+    if(name === "num_planets" || name === "discovery_year" || name === "num_stars" || name === "num_moons") step = 1;
+    else if(name === "mass_earth" || name === "radius_earth" || name === "star_mass" || name === "star_radius") step = 0.05;
+    const newval = parseFloat((val + direction * step).toFixed(6));
+    setForm((prev: any) => ({ ...prev, [name]: newval }));
+  };
+
+  const handleSave = async () => {
+    try {
+       await fetch(`${API}/api/crud/planets/${data.planet_id}`, {
+           method: "PUT", headers: { "Content-Type": "application/json" },
+           body: JSON.stringify(form)
+       });
+       await fetch(`${API}/api/crud/stars/${data.star_id}`, {
+           method: "PUT", headers: { "Content-Type": "application/json" },
+           body: JSON.stringify(form)
+       });
+       await fetch(`${API}/api/crud/systems/${data.system_id}`, {
+           method: "PUT", headers: { "Content-Type": "application/json" },
+           body: JSON.stringify(form)
+       });
+       setData({ ...data, ...form });
+       setEditMode(false);
+    } catch(err) {
+       alert("Failed to save changes");
+    }
+  };
+
+  const handleDelete = async () => {
+     if(!window.confirm("Are you sure you want to delete this planet? System deletion cascades if child planets count drops to zero.")) return;
+     try {
+       await fetch(`${API}/api/crud/planets/${data.planet_id}`, { method: "DELETE" });
+       navigate("/observatory");
+     } catch(err) {
+       alert("Deletion failed");
+     }
+  };
+
+  if (loading) return <div className="min-h-screen bg-black flex justify-center items-center"><div className="animate-spin w-6 h-6 border-t-amber-400 border-2 rounded-full border-white/10" /></div>;
+  if (error || !data) return <div className="min-h-screen bg-black flex justify-center items-center text-white/50">Planet Not Found</div>;
+
+  const currentData = editMode ? form : data;
+  const esi = calculateESIFrontEnd(currentData, currentData);
+
+  const renderDataRow = (label: string, name: string, isNum=true) => {
+    const val = editMode ? form[name] : data[name];
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-white/10 border-t-amber-400/60 rounded-full animate-spin" />
+      <div className={`flex items-center justify-between py-1.5 border-b ${editMode ? "border-amber-500/20" : "border-white/[0.04]"}`}>
+        <span className="text-[11px] text-white/30 tracking-wider uppercase w-1/3">{label}</span>
+        {editMode && name !== "num_planets" ? (
+             isNum ? 
+             <div className="w-1/2 relative group flex">
+               <input type="number" step="any" name={name} value={val ?? ""} onChange={handleChange} className="w-full bg-black/40 text-amber-200 pl-2 pr-6 py-1 rounded text-sm font-mono text-right outline-none border border-white/5 focus:border-amber-500/50 focus:bg-amber-500/5 transition-all shadow-inner [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+               <div className="absolute right-1 top-0 bottom-0 flex flex-col justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                 <button type="button" onClick={() => handleStep(name, 1)} className="text-white/30 hover:text-amber-400 p-[1px] cursor-pointer"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6"/></svg></button>
+                 <button type="button" onClick={() => handleStep(name, -1)} className="text-white/30 hover:text-amber-400 p-[1px] cursor-pointer"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg></button>
+               </div>
+             </div>
+             :
+             <input type="text" name={name} value={val ?? ""} onChange={handleChange} className="w-1/2 bg-black/40 text-amber-200 px-2 py-1 rounded text-sm font-mono text-right outline-none border border-white/5 focus:border-amber-500/50 focus:bg-amber-500/5 transition-all shadow-inner" />
+        ) : (
+             <span className="text-[13px] text-white/75 text-right font-mono">
+               {typeof val === 'boolean' || val === 1 || val === 0 ? (val ? "Yes" : "No") : (val ?? "N/A")}
+             </span>
+        )}
       </div>
     );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white/40 gap-4">
-        <p className="text-lg">Planet not found</p>
-        <button
-          onClick={() => navigate("/observatory")}
-          className="text-sm text-amber-400/60 hover:text-amber-400 transition-colors cursor-pointer"
-          id="back-to-observatory"
-        >
-          ← Back to Observatory
-        </button>
-      </div>
-    );
-  }
-
-  const esi = data.esi;
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Top bar */}
       <div className="sticky top-0 z-50 border-b border-white/[0.06] bg-black/90 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <button
-            onClick={() => navigate("/observatory")}
-            className="text-[13px] text-white/30 hover:text-white/70 transition-colors cursor-pointer flex items-center gap-2"
-            id="detail-back-btn"
-          >
-            ← Observatory
-          </button>
-
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] tracking-[0.3em] text-white/20 uppercase">
-              Mission Control
-            </span>
-            <div className="w-[1px] h-4 bg-white/[0.08]" />
-            <span className="text-[10px] tracking-[0.2em] text-amber-400/40 uppercase font-mono">
-              Technical Spec
-            </span>
+          <button onClick={() => navigate("/observatory")} className="text-[13px] text-white/30 hover:text-white/70">← Observatory</button>
+          
+          <div className="flex items-center gap-4">
+             {editMode ? (
+                 <>
+                    <button onClick={() => setEditMode(false)} className="text-xs px-4 py-1.5 bg-white/5 border border-white/10 hover:bg-white/15 text-white/70 uppercase tracking-widest rounded-full transition-all cursor-pointer">Cancel</button>
+                    <button onClick={handleSave} className="text-xs px-6 py-1.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 hover:border-amber-500/60 uppercase tracking-widest rounded-full shadow-[0_0_15px_rgba(245,158,11,0.2)] transition-all flex items-center cursor-pointer">Save Changes</button>
+                 </>
+             ) : (
+                 <>
+                    <button onClick={handleDelete} className="text-[10px] px-4 py-1.5 bg-red-500/10 border border-red-500/20 text-red-500/70 hover:bg-red-500/20 hover:text-red-400 uppercase tracking-widest rounded-full transition-all cursor-pointer">Delete Planet</button>
+                    <button onClick={() => setEditMode(true)} className="text-[10px] px-5 py-1.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50 uppercase tracking-widest rounded-full shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all flex items-center gap-2 cursor-pointer">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      System Edit
+                    </button>
+                 </>
+             )}
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Header */}
         <div className="flex items-start gap-6 mb-10">
           <ESIGauge score={esi.final_esi} size={80} />
           <div>
-            <h1 className="text-[28px] font-light tracking-wide text-white/95">
-              {data.planet_name}
-            </h1>
-            <p className="text-[14px] text-white/40 mt-1">
-              {data.system_name} · {data.constellation_name || "Unknown Constellation"}
-              {data.distance_pc
-                ? ` · ${data.distance_pc.toFixed(1)} pc`
-                : ""}
-            </p>
-            {esi.is_habitable && (
-              <span className="inline-block mt-2 px-3 py-1 rounded-full bg-emerald-500/[0.1] border border-emerald-500/20 text-emerald-400 text-[11px] tracking-wider uppercase">
-                Within Habitable Zone
-              </span>
-            )}
+            <h1 className="text-[28px] font-light tracking-wide text-white/95">{currentData.planet_name}</h1>
+            <p className="text-[14px] text-white/40 mt-1">{currentData.system_name} · {currentData.constellation_name} {currentData.distance_ly ? `· ${currentData.distance_ly} ly` : ""}</p>
+            <div className="flex flex-wrap gap-2 mt-3">
+               {esi.is_habitable && <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/[0.1] border border-emerald-500/20 text-emerald-400 text-[11px] uppercase tracking-wider">Within Habitable Zone</span>}
+               {currentData.is_circumbinary ? <span className="inline-block px-3 py-1 rounded-full bg-purple-500/[0.1] border border-purple-500/30 text-purple-400 text-[11px] uppercase tracking-wider shadow-[0_0_10px_rgba(168,85,247,0.15)] glow">Circumbinary Orbit</span> : null}
+               {currentData.ttv_obs ? <span className="inline-block px-3 py-1 rounded-full bg-blue-500/[0.1] border border-blue-500/30 text-blue-400 text-[11px] uppercase tracking-wider shadow-[0_0_10px_rgba(59,130,246,0.15)] glow">TTV Observed</span> : null}
+            </div>
           </div>
         </div>
 
-        {/* Zone Tracker */}
         <div className="mb-10 p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-          <ZoneTracker
-            hzInner={esi.hz_inner}
-            hzOuter={esi.hz_outer}
-            orbitDistance={esi.orbit_distance}
-            starLuminosity={esi.star_luminosity}
-          />
+          <ZoneTracker hzInner={esi.hz_inner} hzOuter={esi.hz_outer} orbitDistance={esi.orbit_distance} starLuminosity={esi.star_luminosity} />
         </div>
 
-        {/* ESI Composition Breakdown */}
         <div className="mb-10 p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-          <h3 className="text-[12px] tracking-[0.2em] text-white/30 uppercase mb-5">
-            ESI Composition Breakdown
-          </h3>
           <div className="flex items-center justify-center gap-12 flex-wrap">
             <MiniGauge label="Physical Similarity" score={esi.esi_interior} />
             <div className="text-white/10 text-xl font-light">×</div>
@@ -236,105 +211,63 @@ export default function PlanetDetail() {
             <div className="text-white/10 text-xl font-light">=</div>
             <MiniGauge label="Final ESI" score={esi.final_esi} />
           </div>
-          {!esi.is_habitable && esi.base_esi !== null && (
-            <p className="text-center mt-4 text-[11px] text-red-400/60">
-              Goldilocks penalty applied: base ESI {fmt(esi.base_esi, 4)} → {fmt(esi.final_esi, 4)} (×0.1)
-            </p>
-          )}
         </div>
 
-        {/* Data Grid — 3 columns */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          {/* Star Data */}
+          {/* Planet */}
           <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-            <h3 className="text-[12px] tracking-[0.2em] text-amber-400/50 uppercase mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/40" />
-              Star Data
-            </h3>
-            <DataRow label="Name" value={na(data.star_name)} />
-            <DataRow label="Spectral Type" value={na(data.spectral_type)} />
-            <DataRow label="Temperature" value={na(data.star_temp, " K")} />
-            <DataRow label="Radius" value={na(data.star_radius, " R☉")} />
-            <DataRow label="Mass" value={na(data.star_mass, " M☉")} />
-            <DataRow label="Luminosity (log)" value={na(data.star_luminosity, " L☉")} />
-            <DataRow label="Luminosity (abs)" value={fmt(esi.star_luminosity, 4, " L☉")} />
-            <DataRow label="Gravity" value={na(data.star_gravity, " log g")} />
-            <DataRow label="Metallicity" value={na(data.star_metallicity)} />
-            <DataRow label="Age" value={na(data.star_age, " Gyr")} />
-            <DataRow label="Brightness" value={na(data.star_brightness, " mag")} />
+            <h3 className="text-emerald-400 mb-4 tracking-widest text-xs uppercase">Planet Data</h3>
+            {renderDataRow("Name", "planet_name", false)}
+            {renderDataRow("Radius (R⊕)", "radius_earth")}
+            {renderDataRow("Mass (M⊕)", "mass_earth")}
+            {renderDataRow("Density", "planet_density")}
+            {renderDataRow("Temp (K)", "planet_temp")}
+            {renderDataRow("Orbital Period", "orbital_period")}
+            {renderDataRow("Orbit Radius", "orbit_radius")}
+            {renderDataRow("Eccentricity", "eccentricity")}
+            {renderDataRow("Insolation", "insolation_flux")}
+            {editMode ? (
+               <>
+                   <div className="flex justify-between items-center py-2 border-b border-amber-500/20"><span className="text-[11px] uppercase tracking-widest text-white/30">Circumbinary</span><input type="checkbox" name="is_circumbinary" checked={form.is_circumbinary} onChange={handleChange} className="accent-amber-500 w-4 h-4 rounded border-white/20 bg-black cursor-pointer" /></div>
+                   <div className="flex justify-between items-center py-2 border-b border-amber-500/20"><span className="text-[11px] uppercase tracking-widest text-white/30">TTV Obs</span><input type="checkbox" name="ttv_obs" checked={form.ttv_obs} onChange={handleChange} className="accent-amber-500 w-4 h-4 rounded border-white/20 bg-black cursor-pointer" /></div>
+               </>
+            ) : (
+               <>
+                   {renderDataRow("Circumbinary", "is_circumbinary", false)}
+                   {renderDataRow("TTV Observed", "ttv_obs", false)}
+               </>
+            )}
           </div>
 
-          {/* Planet Data */}
+          {/* Star */}
           <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-            <h3 className="text-[12px] tracking-[0.2em] text-emerald-400/50 uppercase mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/40" />
-              Planet Data
-            </h3>
-            <DataRow label="Name" value={na(data.planet_name)} />
-            <DataRow label="Radius" value={na(data.radius_earth, " R⊕")} />
-            <DataRow label="Mass" value={na(data.mass_earth, " M⊕")} />
-            <DataRow label="Density" value={na(data.planet_density, " g/cm³")} />
-            <DataRow label="Calc. Density" value={fmt(esi.planet_density, 2, " g/cm³")} />
-            <DataRow label="Temperature" value={na(data.planet_temp, " K")} />
-            <DataRow label="Calc. Temp" value={fmt(esi.surface_temp, 1, " K")} />
-            <DataRow label="Escape Vel." value={fmt(esi.escape_velocity, 2, " km/s")} />
-            <DataRow label="Orbital Period" value={na(data.orbital_period, " days")} />
-            <DataRow label="Orbit Radius" value={na(data.orbit_radius, " AU")} />
-            <DataRow label="Calc. Orbit" value={fmt(esi.orbit_distance, 4, " AU")} />
-            <DataRow label="Eccentricity" value={na(data.eccentricity)} />
-            <DataRow label="Insolation" value={na(data.insolation_flux, " S⊕")} />
-            <DataRow label="Circumbinary" value={data.is_circumbinary ? "Yes" : "No"} />
-            <DataRow label="TTV Observed" value={data.ttv_obs ? "Yes" : "No"} />
+            <h3 className="text-amber-400 mb-4 tracking-widest text-xs uppercase">Star Data</h3>
+            {renderDataRow("Name", "star_name", false)}
+            {renderDataRow("Spectral", "spectral_type", false)}
+            {renderDataRow("Temp (K)", "star_temp")}
+            {renderDataRow("Radius (R☉)", "star_radius")}
+            {renderDataRow("Mass (M☉)", "star_mass")}
+            {renderDataRow("Luminosity", "star_luminosity")}
+            {renderDataRow("Gravity", "star_gravity")}
+            {renderDataRow("Metallicity", "star_metallicity")}
+            {renderDataRow("Age (Gyr)", "star_age")}
+            {renderDataRow("Brightness", "star_brightness")}
           </div>
 
-          {/* System & Discovery Data */}
+          {/* System */}
           <div className="p-5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-            <h3 className="text-[12px] tracking-[0.2em] text-blue-400/50 uppercase mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400/40" />
-              System & Discovery
-            </h3>
-            <DataRow label="System" value={na(data.system_name)} />
-            <DataRow label="RA" value={na(data.system_ra, "°")} />
-            <DataRow label="Dec" value={na(data.system_dec, "°")} />
-            <DataRow label="Stars" value={na(data.num_stars)} />
-            <DataRow label="Planets" value={na(data.num_planets)} />
-            <DataRow label="Moons" value={na(data.num_moons)} />
-            <DataRow label="Distance" value={na(data.distance_pc, " pc")} />
-            <DataRow label="Constellation" value={na(data.constellation_name)} />
-
-            <div className="mt-4 mb-2 border-t border-white/[0.06]" />
-            <h4 className="text-[11px] text-white/20 tracking-wider uppercase mb-2">
-              Discovery
-            </h4>
-            <DataRow label="Year" value={na(data.discovery_year)} />
-            <DataRow label="Method" value={na(data.discovery_method)} />
-            <DataRow label="Locale" value={na(data.discovery_locale)} />
-            <DataRow label="Facility" value={na(data.discovery_facility)} />
-            <DataRow label="Telescope" value={na(data.discovery_telescope)} />
-            <DataRow label="Instrument" value={na(data.discovery_instrument)} />
-
-            <div className="mt-4 mb-2 border-t border-white/[0.06]" />
-            <h4 className="text-[11px] text-white/20 tracking-wider uppercase mb-2">
-              Habitable Zone
-            </h4>
-            <DataRow label="HZ Inner" value={fmt(esi.hz_inner, 3, " AU")} />
-            <DataRow label="HZ Outer" value={fmt(esi.hz_outer, 3, " AU")} />
-            <DataRow
-              label="In HZ?"
-              value={esi.is_habitable ? "✓ Yes" : "✗ No"}
-            />
+             <h3 className="text-blue-400 mb-4 text-xs tracking-widest uppercase">System Metadata</h3>
+             {renderDataRow("System Name", "system_name", false)}
+             {renderDataRow("Num Stars", "num_stars")}
+             {renderDataRow("Num Moons", "num_moons")}
+             {renderDataRow("Distance (ly)", "distance_ly")}
+             {renderDataRow("Num Planets", "num_planets")}
+             {editMode && (
+                 <div className="my-8 text-[11px] text-amber-500/80 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl leading-relaxed hidden md:block">
+                   Entering System Edit Mode allows modifying planet, star, and positional attributes independently. Note that changes to distance and stars impacts the entire host system for all parallel planets. Click save on the top to persist changes down to the MySQL Database.
+                 </div>
+             )}
           </div>
-        </div>
-
-        {/* Navigate to system visualizer */}
-        <div className="text-center pb-12">
-          <button
-            onClick={() => navigate(`/system/${data.system_id}`)}
-            className="px-6 py-2.5 rounded-full text-[12px] tracking-widest uppercase border border-white/[0.08] text-white/40 hover:text-amber-400/80 hover:border-amber-400/20 transition-all duration-500 cursor-pointer"
-            id="view-system-btn"
-          >
-            View System Orbit Visualizer →
-          </button>
         </div>
       </div>
     </div>

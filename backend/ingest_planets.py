@@ -157,7 +157,7 @@ def main():
 
         insert_system_query = """
             INSERT INTO StarSystem (
-                system_name, `ra`, `dec`, num_stars, num_planets, num_moons, distance_pc, constellation_id
+                system_name, `ra`, `dec`, num_stars, num_planets, num_moons, distance_ly, constellation_id
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
@@ -201,7 +201,15 @@ def main():
             system_id = system_cache.get(system_name)
             if not system_id:
                 dist = clean_val(row.get('distance_pc'))
-                if dist is not None and dist <= 0: dist = None
+                if dist is not None:
+                    try:
+                        dist = float(dist)
+                        if dist <= 0:
+                            dist = None
+                        else:
+                            dist = round(dist * 3.26156, 6)  # parsecs → light-years
+                    except (ValueError, TypeError):
+                        dist = None
                 
                 ns = clean_val(row.get('num_stars')) or 1
                 np_= clean_val(row.get('num_planets')) or 1

@@ -11,7 +11,7 @@ interface SystemCard {
   num_stars: number;
   num_planets: number;
   num_moons: number;
-  distance_pc: number | null;
+  distance_ly: number | null;
   constellation_name: string | null;
 }
 
@@ -245,9 +245,9 @@ export default function Gallery() {
                         </span>
                       )}
 
-                      {sys.distance_pc && (
+                      {sys.distance_ly && (
                         <span className="text-white/20 ml-auto">
-                          {sys.distance_pc.toFixed(1)} pc
+                          {sys.distance_ly.toFixed(1)} ly
                         </span>
                       )}
                     </div>
