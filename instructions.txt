@@ -5,7 +5,7 @@ EDIT THE .env.example FILE IN THE ROOT DIRECTORY TO MATCH YOUR MYSQL ROOT PASSWO
 COPY THE .env.example FILE INTO ANOTHER FILE CALLED .env
 
 First run this in terminal 1:
-    python -m venv venv && .\venv\Scripts\python.exe -m pip install -r requirements.txt && npm install && .\venv\Scripts\activate
+    python -m venv venv && .\venv\Scripts\python.exe -m pip install -r requirements.txt && npm install
 
 Then run this in terminal 2:
     mysql-start
@@ -17,6 +17,7 @@ Then in the same terminal 2 after getting MYSQL prompt:
 
 WAIT for the terminal 1 to finish installing all dependencies (Takes 10 minutes)
 THEN run this in terminal 1:
+    .\venv\Scripts\activate
     python backend/ingestConstellation.py
     python backend/ingest_planets.py
 
