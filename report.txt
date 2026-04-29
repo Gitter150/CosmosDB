@@ -1,0 +1,821 @@
+CONTENTS
+
+Sl. No. | TITLE | Page no
+--- | --- | ---
+1. | Content's Abstract | 3
+2. | Introduction | 5
+4. | Background, Motivation and Scope | 8
+5. | Methodology | 12
+7. | Requirements | 16
+8. | E-R Diagram | 20
+9. | Relational Database Design | 25
+10. | Database Normalization | 34
+11. | Data Directory | 40
+12. | Graphical User Interface | 44
+13. | Source Code | 50
+14. | Conclusion | 78
+
+---
+
+### 1. Content's Abstract
+
+The CosmosDB project is a highly sophisticated data-engineering prototype designed to demonstrate advanced concepts in relational database management systems (RDBMS). At its core, the project focuses on migrating massive, unstructured, and highly redundant flat-file astronomical datasets sourced from the NASA Exoplanet Archive into a rigorously constrained, deeply normalized MySQL 8.0 architecture.
+
+The primary objective of this project is to showcase the absolute power of SQL as both a declarative Data Definition Language (DDL) and an imperative Data Manipulation Language (DML). It highlights the rigorous theoretical transition from First Normal Form (1NF) all the way up to Third Normal Form (3NF), illustrating precisely how to mathematically eliminate update anomalies, insert anomalies, and structural data duplication through the strategic abstraction of five entities: Constellations, Star Systems, Stars, Planets, and Discovery metadata.
+
+Furthermore, the project features robust Python ETL (Extract, Transform, Load) pipelines that directly interface with the MySQL storage engine. These scripts demonstrate advanced database interaction techniques, including in-memory relational mapping to bypass costly physical disk reads, executing batch INSERT statements to construct hierarchical relationships on the fly, and managing explicit transactional boundaries using COMMIT and ROLLBACK. The architectural focal point of this entire project remains unequivocally on the SQL engine — query optimization, complex multi-table LEFT JOIN aggregations, B-Tree index traversal, referential integrity enforcement, and programmatic cascading state mutations.
+
+### 2. Introduction
+
+In the modern era of massive scientific datasets, the ability to store, rapidly retrieve, and permanently maintain the structural integrity of interrelated data is paramount. While NoSQL and flat-file formats like CSV or JSON document stores offer ease of use and rapid deployment, they fundamentally lack the rigorous structural guarantees required for complex, interrelated scientific logic. Astrophysics — specifically exoplanet research — generates data that is intrinsically relational: a single Star System anchors multiple Stars, which host multiple Planets, all discovered by specific Telescopes in specific Years. Every entity depends on every other.
+
+CosmosDB was built to definitively prove that a strict Relational Database Management System (MySQL) is the mathematically superior architectural choice for this kind of hierarchical scientific data. This project is not merely a web application; it is a deep exploration of advanced SQL concepts. It demonstrates exactly how to utilize CHECK constraints to enforce the laws of physics directly at the disk level — preventing the insertion of impossible data like negative planetary mass or a star with a surface temperature below absolute zero. It shows how to use explicit Foreign Key constraints to automatically maintain referential integrity through deterministic ON DELETE CASCADE and ON DELETE SET NULL operations, ensuring that the database can never contain an orphaned planet belonging to a deleted star system.
+
+Beyond the schema definition, CosmosDB extensively explores the programmatic interface between Python and the SQL engine. The project features robust administrative modules that execute precise DML commands, construct dynamic UPDATE statements securely using parameterized queries to prevent SQL injection, and execute TRUNCATE operations during database resets while navigating complex foreign key lock states. The frontend and REST API serve merely as a visual and programmatic window into the raw power of the underlying SQL queries. Every card rendered, every search result, every chart is the direct output of a hand-crafted SQL statement.
+
+### 4. Background, Motivation and Scope
+
+**Background and Motivation:**
+
+The origin of CosmosDB lies in the severe architectural limitations of the NASA Exoplanet Archive's flat CSV distribution model. When astronomers download this dataset, they receive a sprawling spreadsheet where a single row contains information about a planet, its host star, the star system's celestial coordinates, and the telescope facility used to discover it — all mixed together in one flat record.
+
+This flat architecture introduces a cascade of well-known relational anomalies. The most severe is the update anomaly. If a system like Kepler-90 has 8 confirmed planets, the string "Kepler-90", its Right Ascension, its Declination, and its distance in parsecs are duplicated across 8 entirely separate rows in the CSV. If a new scientific paper refines the distance measurement to Kepler-90, a database administrator must manually locate and update all 8 rows. If even one is missed, the database splits into two conflicting truths — a catastrophic data integrity failure.
+
+The second problem is the insert anomaly. In a flat file, you cannot record the existence of a newly discovered Star System unless you also have at least one planet to populate the row. This creates an artificial dependency between logically separate real-world entities.
+
+The third problem is the delete anomaly. Deleting the last known planet of a system from a flat file also destroys the only record of that system's coordinates, distance, and constellation — unintentionally wiping data that had nothing to do with the planet itself.
+
+The core motivation for CosmosDB was to definitively solve all three of these anomalies using Database Normalization. By mathematically splitting the monolithic flat structure into five standalone, interconnected SQL tables, we guarantee that every piece of data lives in exactly one row, in exactly one table. Updating the distance to Kepler-90 once propagates that correction to every planet that references it via the system_id foreign key — zero redundancy, zero inconsistency.
+
+**Scope of the Project:**
+
+The scope of CosmosDB is tightly focused on four domains of database engineering:
+
+1. DDL and Constraint Engineering: Designing the Data Definition Language schema for five hierarchical tables with appropriate data types (DOUBLE for floating-point coordinates), and embedding absolute scientific bounds using CHECK constraints that the MySQL engine enforces at the storage layer.
+
+2. ETL Database Seeding: Building Python scripts that act as the ingest engine — parsing raw CSV files, performing NaN normalization and physical-range validation, resolving foreign keys via in-memory dictionaries, and executing massive batch INSERTs into the normalized SQL engine.
+
+3. Complex Query Construction: Writing highly optimized SELECT queries using LEFT JOIN across five tables, GROUP BY with ANY_VALUE aggregations, WHERE clause construction, ORDER BY, and LIMIT/OFFSET pagination — all executed natively by the SQL query optimizer.
+
+4. Transaction and Referential Management: Handling DML operations (INSERT, UPDATE, DELETE) through Python with explicit COMMIT and ROLLBACK to guarantee ACID-compliant atomic transactions, and navigating foreign key lock states during administrative TRUNCATE operations.
+
+### 5. Methodology
+
+The methodology for CosmosDB is structured around three distinct tiers, each with a clearly defined responsibility boundary.
+
+**Tier 1 — Data Definition and Normalization (The SQL Schema):**
+
+The methodology begins with entity-relationship modeling. We identified five real-world entities and mapped their dependencies: a Constellation spatially contains Star Systems; a Star System gravitationally anchors Stars and hosts Planets; a Discovery historically records how a Planet was found. This hierarchy drove the schema design in schema.sql.
+
+The methodology prioritizes strict typing. Celestial coordinates require extreme floating-point precision, so DOUBLE (8 bytes, ~15 decimal digits) was chosen over FLOAT (4 bytes, ~7 digits) for all coordinate columns. This prevents floating-point drift during repeated spatial calculations. Furthermore, the methodology mandates that data integrity must be enforced at the database layer — not the application layer. CHECK constraints in the SQL schema act as the final, unbreakable barrier against bad data. Even if a developer bypasses the Python API and manually connects to the MySQL shell, the engine will reject any value that violates a constraint.
+
+**Tier 2 — The ETL Ingestion Pipeline (Python to SQL):**
+
+Inserting 5,000 flat CSV rows into five normalized tables requires dynamically resolving foreign keys across entities. The naive approach — querying the database for system_id once per CSV row — would create 5,000 round-trip I/O operations, making ingestion catastrophically slow. Our methodology employs In-Memory Relational Caching. Python queries the Constellation table exactly once at startup, loads all records into a dictionary keyed by coordinate bounds, and performs spatial lookups entirely in RAM for every subsequent CSV row. System-name-to-system_id mappings are tracked in a separate dictionary, completely eliminating redundant SELECT queries during the ingestion loop.
+
+When a new row is encountered with a star system name that doesn't yet exist in the cache, Python executes an INSERT INTO StarSystem and immediately captures cursor.lastrowid — the auto-incremented primary key generated by the MySQL engine. This integer is used directly as the foreign key for the subsequent Star and Planet INSERTs, chaining the hierarchy without any additional SELECT. A single db.commit() at the very end of the loop writes all changes atomically to disk. If any error occurs, db.rollback() reverts the entire batch.
+
+**Tier 3 — Data Retrieval and Query Optimization:**
+
+When the frontend requests data, it needs a flattened view of the relational structure that MySQL purposely keeps separated. The methodology relies on executing complex Mega-Joins within the SQL engine itself. Rather than fetching five tables into Python and combining them with application-level loops — which is computationally disastrous — we construct a single SELECT statement with multiple LEFT JOIN clauses. The SQL query optimizer resolves these joins using the B-Tree secondary indexes automatically generated by InnoDB for every foreign key column. Native LIMIT and OFFSET pagination ensures that the engine only scans and returns the exact page of rows requested.
+
+### 7. Requirements
+
+**Database Requirements:**
+
+- MySQL Server Community Edition 8.x: The core engine. It must be version 8.0.16 or higher. This is the version in which MySQL introduced full engine-level enforcement of CHECK constraints. In all earlier versions, CHECK constraint syntax was parsed and silently ignored, meaning the scientific bounds in the schema would have no enforcement power. The database is configured on the default port 3306.
+
+- InnoDB Storage Engine: Strictly required. InnoDB is the only MySQL storage engine that supports Foreign Key constraints with ON DELETE CASCADE / SET NULL referential actions, row-level locking for concurrent access, and ACID-compliant transaction management with COMMIT and ROLLBACK. The legacy MyISAM engine parses foreign key declarations but ignores them entirely.
+
+**Python Interface Requirements:**
+
+- Python 3.8 or higher: The scripting runtime for both the ETL ingestion pipeline and the FastAPI REST API server.
+
+- mysql-connector-python: The official Oracle-supported MySQL driver. This library is required specifically because it supports parameterized query execution using the %s placeholder syntax. When a user-supplied string is passed as a parameter, the driver transmits the query structure and the data as two separate protocol messages to the MySQL server. The server pre-compiles the query plan before it ever sees the data, making SQL injection structurally impossible.
+
+- pandas: Used in the ETL scripts for high-performance CSV parsing, whitespace stripping, and NaN-to-None conversion before data reaches the SQL engine.
+
+- python-dotenv: Loads database credentials from a .env environment file at runtime. Credentials are never hardcoded in any source file and the .env file is excluded from version control via .gitignore.
+
+**Frontend and API Requirements:**
+
+- Node.js LTS and npm: Required to compile and serve the React/TypeScript frontend via the Vite development server.
+
+- FastAPI and Uvicorn: The Python ASGI web framework and server that expose the MySQL query results as JSON API endpoints consumed by the frontend.
+
+**Execution Prerequisites:**
+
+- The database schema must be initialized by sourcing schema.sql through the MySQL shell: `\source SQL/schema.sql`
+- The ingestConstellation.py script must run before ingest_planets.py, as planet ingestion depends on constellation records already existing in the database.
+- The executing MySQL user must have sufficient privileges to run SET FOREIGN_KEY_CHECKS = 0, required during the administrative database reset operation.
+
+### 8. E-R Diagram
+
+The following Entity-Relationship diagram maps all five tables in the CosmosDB schema, showing their primary keys, attributes with data types and constraints, and the foreign key relationships with their referential actions.
+
+```mermaid
+erDiagram
+    CONSTELLATION ||--o{ STAR_SYSTEM : spatially_encompasses
+    DISCOVERY ||--o{ PLANET : chronicles_discovery
+    STAR_SYSTEM ||--|{ STAR : gravitationally_anchors
+    STAR_SYSTEM ||--o{ PLANET : hosts_in_orbit
+
+    CONSTELLATION {
+        int constellation_id PK
+        varchar constellation_name
+        double min_ra
+        double max_ra
+        double min_dec
+        double max_dec
+        text description
+        int pop_rank
+    }
+
+    STAR_SYSTEM {
+        int system_id PK
+        varchar system_name
+        double ra
+        double dec
+        int num_stars
+        int num_planets
+        int num_moons
+        double distance_ly
+        int constellation_id FK
+    }
+
+    STAR {
+        int star_id PK
+        varchar star_name
+        int system_id FK
+        varchar spectral_type
+        double star_temp
+        double star_mass
+        double star_radius
+        double star_luminosity
+        double star_metallicity
+        double star_gravity
+        double star_age
+        double star_brightness
+    }
+
+    PLANET {
+        int planet_id PK
+        varchar planet_name
+        int system_id FK
+        int discovery_id FK
+        boolean is_circumbinary
+        double orbital_period
+        double orbit_radius
+        double radius_earth
+        double mass_earth
+        double planet_density
+        double planet_temp
+        double eccentricity
+        double insolation_flux
+        boolean ttv_obs
+    }
+
+    DISCOVERY {
+        int discovery_id PK
+        int discovery_year
+        varchar discovery_method
+        varchar discovery_locale
+        varchar discovery_facility
+        varchar discovery_telescope
+        varchar discovery_instrument
+    }
+```
+
+The diagram illustrates two distinct referential action strategies. ON DELETE CASCADE is applied to Star and Planet relationships with StarSystem — if a system is removed, all its children are automatically destroyed. ON DELETE SET NULL is applied to the Constellation and Discovery relationships — if a constellation or discovery record is removed, the referencing rows retain their physical data but lose the regional or historical tag.
+
+### 9. Relational Database Design
+
+The CosmosDB schema breaks down the monolithic flat CSV into five atomic, interrelated tables. The design philosophy mandates that every piece of information has exactly one home in the database, enforced by the relational structure and foreign key constraints.
+
+**Table 1 — Constellation:**
+
+This table acts as the spatial reference grid for the entire database. Rather than embedding the string "Cygnus" on every planet row that happens to reside in that region of the sky, Constellation stores the 88 IAU-recognized regions as bounded coordinate rectangles. Each constellation occupies a unique rectangle in the sky defined by its minimum and maximum Right Ascension (0–360 degrees) and Declination (-90 to 90 degrees). The ETL script performs spatial point-in-rectangle lookups against these bounds to assign a constellation_id to every star system during ingestion.
+
+The CHECK constraints on this table enforce physical reality: CHECK (min_ra BETWEEN 0 AND 360) ensures no coordinate can exceed the limits of the celestial sphere. The pop_rank column stores the IAU popularity ranking (1–88), useful for filtering and sorting, also protected by CHECK (pop_rank BETWEEN 1 AND 88).
+
+**Table 2 — StarSystem:**
+
+StarSystem is the central hub of the relational hierarchy. It is the entity to which all other scientific entities are ultimately anchored. The system_name column carries a UNIQUE NOT NULL constraint — Kepler-90 must appear exactly once, not 8 times. The constellation_id foreign key connects the system to its spatial region with ON DELETE SET NULL, meaning constellation data can be administratively modified without risking the loss of star system records.
+
+The columns num_stars, num_planets, and num_moons represent a deliberate denormalization. In strict 3NF, these should be computed dynamically via COUNT subqueries on the Star and Planet tables. In practice, doing so on every paginated API request would require correlated subqueries across thousands of rows on every page load. Storing the counts directly on StarSystem allows the API to retrieve them in a simple SELECT without any aggregation. The trade-off is that every INSERT and DELETE on the Star and Planet tables must be accompanied by a corresponding UPDATE on StarSystem to keep these counters synchronized. This cost is accepted because it moves computational overhead from the high-frequency Read path to the lower-frequency Write path.
+
+**Table 3 — Discovery:**
+
+This table decouples historical discovery metadata from physical planetary properties. A Discovery record captures when a planet was found (discovery_year), how it was found (discovery_method: Transit, Radial Velocity, Direct Imaging, etc.), and by whom and where (discovery_locale, discovery_facility, discovery_telescope, discovery_instrument). By isolating this information, we prevent a massive transitive dependency: in the flat CSV, discovery_instrument depends on discovery_telescope, which depends on discovery_facility — a clear 3NF violation if stored on the Planet table. Extracting this into Discovery resolves the transitive chain. All 3,000 planets discovered by Kepler using the Transit method share a single Discovery record referenced by a 4-byte integer foreign key, rather than duplicating six strings across 3,000 rows.
+
+**Table 4 — Star:**
+
+The Star table captures the physical and spectroscopic properties of the host stars: spectral classification (spectral_type), effective surface temperature (star_temp in Kelvin), mass (star_mass in Solar Masses), radius (star_radius in Solar Radii), luminosity (star_luminosity as log₁₀(L/L☉)), metallicity (star_metallicity in [Fe/H]), surface gravity (star_gravity as log g), age (star_age in billions of years), and apparent brightness (star_brightness in V-band magnitude). All numerical columns carry CHECK constraints derived from the physical extremes of the NASA dataset, preventing the insertion of stellar parameters that violate astrophysical reality.
+
+The system_id foreign key links every star to its parent system via ON DELETE CASCADE. This is physically appropriate — if the StarSystem record for Kepler-90 is deleted, there is no rational meaning to retaining a record describing a star that supposedly orbits it. InnoDB handles the cascade automatically.
+
+**Table 5 — Planet:**
+
+Planet is the most constrained and data-dense table in the schema. It contains two foreign keys: system_id with ON DELETE CASCADE (a planet has no meaning without its system) and discovery_id with ON DELETE SET NULL (physical orbital data is preserved even if historical provenance is lost). The planetary columns include orbital mechanics (orbital_period in days, orbit_radius in AU, eccentricity), physical properties (radius_earth, mass_earth, planet_density in g/cm³), thermal conditions (planet_temp in Kelvin, insolation_flux relative to Earth), and boolean flags (is_circumbinary indicating the planet orbits two stars, ttv_obs indicating detected Transit Timing Variations). Each numeric column carries precisely bounded CHECK constraints matching the absolute extremes in the NASA dataset.
+
+**Referential Integrity — ON DELETE CASCADE vs ON DELETE SET NULL:**
+
+The choice between CASCADE and SET NULL is an explicit design decision for every relationship. CASCADE is used where the child entity has no independent meaning without its parent (Star and Planet without StarSystem). SET NULL is used where the child retains scientific value even if the parent reference is removed (a Planet's orbital data is still valid even if the Discovery record is deleted; a StarSystem's coordinates are still valid even if its Constellation boundary is redefined). Named CONSTRAINT identifiers (CONSTRAINT fk_planet_system, CONSTRAINT fk_constellation) are provided for every foreign key so that MySQL error messages identify exactly which constraint was violated, and so that ALTER TABLE commands can modify individual constraints without rebuilding the entire table.
+
+**B-Tree Indexing and Query Performance:**
+
+Every INT AUTO_INCREMENT PRIMARY KEY in the schema causes InnoDB to construct a clustered B-Tree primary index, physically ordering all rows in the table by that key. This makes primary key lookups (SELECT * FROM Planet WHERE planet_id = X) execute in O(log N) time. Every FOREIGN KEY declaration (system_id on Planet, constellation_id on StarSystem, etc.) automatically causes InnoDB to build a secondary B-Tree index on that column. These secondary indexes enable the multi-table LEFT JOIN operations in the API to resolve in milliseconds rather than performing full table scans. The UNIQUE constraint on system_name and planet_name also generates unique secondary indexes, providing O(log N) lookups for deduplication during ingestion.
+
+The choice of DOUBLE over FLOAT for all decimal columns is also an index-relevant decision. DOUBLE occupies 8 bytes and provides approximately 15 significant decimal digits of precision, versus FLOAT's 4 bytes and 7 digits. For coordinates like Right Ascension and Declination, FLOAT precision is insufficient — spatial lookups would incorrectly match or miss stars due to rounding error accumulation. DOUBLE eliminates this class of bug.
+
+**Mitigating ONLY_FULL_GROUP_BY:**
+
+MySQL 8.0's strict ONLY_FULL_GROUP_BY SQL mode requires that every column in a SELECT statement either appear in the GROUP BY clause or be wrapped in an aggregate function. When the five-table join brings in multiple Star rows per Planet (in systems with binary stars), grouping by planet_id produces multiple candidate star values. The queries resolve this using ANY_VALUE(st.star_temp), which explicitly instructs the SQL optimizer to return one star temperature value per group without requiring star_temp to appear in the GROUP BY. This produces a valid, performant execution plan and avoids the need to group by every individual star column.
+
+### 10. Database Normalization
+
+Database normalization is the formal mathematical process of organizing relational tables to eliminate redundancy and prevent data anomalies. CosmosDB was designed with normalization as a primary objective, achieving up to Third Normal Form with one deliberate, documented exception.
+
+**The Three Anomalies That Normalization Prevents:**
+
+Before discussing the normal forms achieved, it is important to understand what problems they solve.
+
+An Insert Anomaly occurs when you cannot record information about one entity without being forced to record information about another. In the flat NASA CSV, it is impossible to record a newly discovered Star System unless you also have at least one planet to fill out the row. In CosmosDB's normalized schema, StarSystem is a standalone table — a system can be inserted with zero planets.
+
+An Update Anomaly occurs when a single real-world fact is stored in multiple rows, and updating one row leaves the others stale. In the flat CSV, the distance to Kepler-90 appears on 8 rows — one per planet. Correcting it requires updating all 8. Miss one, and the database contains contradictory data. In CosmosDB, the distance is stored once in StarSystem. Updating it there propagates the correction universally.
+
+A Delete Anomaly occurs when deleting one fact accidentally destroys an unrelated fact. Deleting the last planet of a system from the flat CSV would also destroy the only record of that system's coordinates. In CosmosDB, Planet and StarSystem are separate tables; deleting a planet never touches the system record.
+
+**First Normal Form (1NF) — Achieved:**
+
+1NF requires that every column hold atomic (indivisible) values, that there be no repeating groups or arrays within a single cell, and that every row be uniquely identifiable. CosmosDB satisfies 1NF completely. No column stores comma-separated lists or embedded arrays. Every table has a dedicated INT AUTO_INCREMENT PRIMARY KEY that InnoDB uses to construct the clustered B-Tree index, guaranteeing unique row identification. All attribute values are scalar.
+
+**Second Normal Form (2NF) — Achieved:**
+
+2NF builds on 1NF and additionally requires that no non-key attribute exhibit a partial dependency — that is, no attribute should depend on only part of a composite primary key. Because CosmosDB uses single-column surrogate integer primary keys for every table, composite primary keys do not exist anywhere in the schema. Partial dependencies are therefore mathematically impossible by construction. 2NF is trivially satisfied across the entire schema.
+
+**Third Normal Form (3NF) — Achieved with One Documented Exception:**
+
+3NF builds on 2NF and requires that no non-key column transitively depend on another non-key column. A transitive dependency exists when column C depends on column B, which depends on the primary key A — but C is stored directly on the same table as A rather than being extracted into its own entity.
+
+The primary 3NF achievement in CosmosDB is the Discovery table. In the raw flat CSV, discovery_instrument is determined by discovery_telescope, which is determined by discovery_facility. These form a transitive chain: planet_id → discovery_facility → discovery_telescope → discovery_instrument. Storing all three on the Planet table would violate 3NF. Extracting them into a standalone Discovery table, referenced by a foreign key, eliminates the transitive dependency entirely.
+
+The one documented 3NF violation is the num_planets and num_stars columns on StarSystem. These values can be derived by executing SELECT COUNT(*) FROM Planet WHERE system_id = X, which means they transitively depend on the data in the Planet table rather than directly on the StarSystem primary key. This violates 3NF. The violation is intentional and documented: executing a correlated subquery COUNT across 5,000 systems on every paginated API call would produce unacceptable latency. Storing the count directly on the parent row reduces the read query to a simple indexed SELECT. The cost of this denormalization is that every Write operation on the Planet table must also execute an UPDATE on StarSystem to maintain the counter.
+
+### 11. Data Directory
+
+The project workspace is partitioned into clearly separated layers, isolating the database definition layer, the Python ingestion scripts, the REST API, and the frontend.
+
+**/SQL/ Directory:**
+- schema.sql: The master DDL file. This is the single source of truth for the entire database architecture. It contains five CREATE TABLE statements, each with full column definitions, data type specifications, CHECK constraints, UNIQUE constraints, PRIMARY KEY declarations, FOREIGN KEY constraints with named identifiers, and explicit ON DELETE referential actions. Running this file via the MySQL shell initializes the entire schema in one command.
+
+**/backend/ Directory:**
+- ingestConstellation.py: The first ingestion script that must be run. Reads Constellations.csv using Pandas and batch-inserts all 88 IAU constellation records using cursor.executemany(), which compiles one prepared statement and sends all 88 data payloads in a single network operation. Must run before ingest_planets.py because the planet ingestion spatial lookup depends on constellation records existing in the database.
+- ingest_planets.py: The main ETL script. Reads ExoplanetDataset.csv (~5,000 rows), performs NaN normalization, physical range validation, boolean parsing, and unit conversion (parsecs to light years), then populates the StarSystem, Star, Planet, and Discovery tables using in-memory foreign key caches.
+- main.py: The FastAPI server entry point. Defines all read-only GET routes. Builds dynamic, parameterized SQL SELECT queries with LEFT JOIN, GROUP BY, ORDER BY, and LIMIT/OFFSET based on the query parameters received from the frontend.
+- crud.py: The DML controller. Handles POST, PUT, and DELETE routes. Executes INSERT, UPDATE, and DELETE statements inside explicit try/except blocks with db.commit() on success and db.rollback() on failure. Also contains the database reset endpoint that executes TRUNCATE after disabling foreign key checks.
+- utils.py: Mathematical utility functions, including the Earth Similarity Index (ESI) calculator which applies astrophysical formulae to compute habitability scores from database values.
+- analytics.py: Provides aggregated statistical endpoints consumed by the frontend charts.
+
+**/data/ Directory:**
+- ExoplanetDataset.csv: The raw NASA Exoplanet Archive flat file. Approximately 5,000 rows of unnormalized planet data.
+- Constellations.csv: A curated CSV of the 88 IAU constellations with coordinate boundaries, descriptions, and popularity rankings.
+
+**Root Directory:**
+- .env: Stores database credentials (host, port, user, password, database name). Never committed to version control.
+- .env.example: A credential template without actual secrets, safe to commit, guides new developers in configuring their local environment.
+- requirements.txt: Python dependency manifest (fastapi, uvicorn, mysql-connector-python, pandas, numpy, python-dotenv).
+- package.json: Node.js dependency manifest for the React/TypeScript frontend.
+
+### 12. Graphical User Interface
+
+While the project is fundamentally database-centric, the GUI serves as direct visual proof that the SQL queries are correct, performant, and returning complete relational data.
+
+**The Observatory Tab:**
+
+*[INSERT SCREENSHOT: Home Page / Observatory Grid here]*
+
+The landing page of the application renders a paginated grid of exoplanet cards. Each card aggregates data from four tables — Planet, StarSystem, Constellation, and Discovery — flattened by a single five-table LEFT JOIN query. The speed at which cards render is a direct reflection of B-Tree index efficiency. Clicking the next page button triggers a LIMIT 50 OFFSET 50 query; the engine returns only the exact 50 rows needed, never loading the full 5,000-row dataset into memory or application RAM.
+
+The search bar fires a WHERE planet_name LIKE %s query as the user types. Constellation and discovery method dropdowns add additional WHERE conditions to the same query, dynamically composed in Python. All user inputs are passed as parameterized values, never string-concatenated into the query, ensuring SQL injection is impossible.
+
+**The Orbit Visualizer (System Deep Dive):**
+
+*[INSERT SCREENSHOT: Planet Orbit Visualizer here]*
+
+Navigating into a star system fires three targeted SQL queries using the system_id primary key index. The first retrieves system metadata joined with the constellation name. The second retrieves all host stars. The third retrieves all planets joined with discovery metadata, ordered by orbital_period ASC so the innermost planet renders first. Every visual property of the rendered solar system — orbit radius, planet color based on temperature, ellipse shape based on eccentricity — is derived directly from the values returned by these queries.
+
+**Planet Details (More Details View):**
+
+*[INSERT SCREENSHOT: Planet 'More Details' View here]*
+
+Selecting an individual planet opens the detailed planetary view. This interface presents the exhaustive physical and orbital properties of the planet, showcasing the comprehensive data retrieved via the multi-table join. All statistics presented here, from habitability markers to the detailed discovery history, are accurately aggregated from the SQL backend without data duplication.
+
+**Administrative CRUD Dialogs:**
+
+*[INSERT SCREENSHOT: Add Planet Form here]*
+
+The admin panel proves the correctness of the DML pipeline. The Add Planet form uses a live search dropdown that fires WHERE system_name LIKE %s queries as the user types a host system name. On submission, the backend executes an INSERT transaction and immediately fires UPDATE StarSystem SET num_planets = num_planets + 1 to maintain the denormalized counter. The Delete button fires the cascading delete sequence. The Edit form fires a parameterized UPDATE with all modified fields. The database reset button fires the TRUNCATE sequence. Every UI interaction maps directly to a precisely crafted SQL operation.
+
+### 13. Source Code
+
+This section presents the raw SQL DDL and Python-to-SQL integration code that powers the CosmosDB engine. It covers schema definition, ETL ingestion with deduplication, complex multi-table retrieval, transactional DML mutations, and administrative database purging.
+
+**A. Database Schema DDL (schema.sql)**
+
+The complete schema enforces constraints at the storage layer. The full Constellation and Star table definitions, followed by the two most critical tables — StarSystem and Planet — are shown below with all constraints and foreign key declarations.
+
+```sql
+CREATE TABLE Constellation (
+    constellation_id INT AUTO_INCREMENT PRIMARY KEY,
+    constellation_name VARCHAR(255) NOT NULL,
+    min_ra DOUBLE NOT NULL CHECK (min_ra BETWEEN 0 AND 360),
+    max_ra DOUBLE NOT NULL CHECK (max_ra BETWEEN 0 AND 360),
+    min_dec DOUBLE NOT NULL CHECK (min_dec BETWEEN -90 AND 90),
+    max_dec DOUBLE NOT NULL CHECK (max_dec BETWEEN -90 AND 90),
+    description TEXT NOT NULL,
+    pop_rank INT CHECK (pop_rank BETWEEN 1 AND 88) NOT NULL
+);
+
+CREATE TABLE StarSystem (
+    system_id INT AUTO_INCREMENT PRIMARY KEY,
+    system_name VARCHAR(255) UNIQUE NOT NULL,
+    `ra` DOUBLE CHECK (`ra` BETWEEN 0 AND 360 OR `ra` IS NULL),
+    `dec` DOUBLE CHECK (`dec` BETWEEN -90 AND 90 OR `dec` IS NULL),
+    num_stars INT DEFAULT 1 CHECK (num_stars > 0),
+    num_planets INT DEFAULT 1 CHECK (num_planets >= 0),
+    num_moons INT DEFAULT 0 CHECK (num_moons >= 0),
+    distance_ly DOUBLE CHECK (distance_ly > 0 OR distance_ly IS NULL),
+    constellation_id INT,
+    CONSTRAINT fk_constellation
+        FOREIGN KEY (constellation_id)
+        REFERENCES Constellation(constellation_id)
+        ON DELETE SET NULL
+);
+
+CREATE TABLE Discovery (
+    discovery_id INT AUTO_INCREMENT PRIMARY KEY,
+    discovery_year INT NOT NULL CHECK (discovery_year BETWEEN 1992 AND 2026),
+    discovery_method VARCHAR(255) NOT NULL,
+    discovery_locale VARCHAR(255) NOT NULL,
+    discovery_facility VARCHAR(255) NOT NULL,
+    discovery_telescope VARCHAR(255) NOT NULL,
+    discovery_instrument VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE Star (
+    star_id INT AUTO_INCREMENT PRIMARY KEY,
+    star_name VARCHAR(255) NOT NULL UNIQUE,
+    system_id INT NOT NULL,
+    CONSTRAINT fk_star_system
+        FOREIGN KEY (system_id)
+        REFERENCES StarSystem(system_id)
+        ON DELETE CASCADE,
+    spectral_type VARCHAR(20),
+    star_temp INT CHECK ((star_temp BETWEEN 415 AND 57000) OR star_temp IS NULL),
+    star_radius DOUBLE CHECK ((star_radius BETWEEN 0.0115 AND 88.475) OR star_radius IS NULL),
+    star_mass DOUBLE CHECK ((star_mass BETWEEN 0.0094 AND 10.94) OR star_mass IS NULL),
+    star_metallicity DOUBLE CHECK ((star_metallicity BETWEEN -1 AND 0.79) OR star_metallicity IS NULL),
+    star_luminosity DOUBLE CHECK ((star_luminosity BETWEEN -6.09 AND 3.8) OR star_luminosity IS NULL),
+    star_gravity DOUBLE CHECK ((star_gravity BETWEEN 0.541 AND 8.07) OR star_gravity IS NULL),
+    star_age DOUBLE CHECK ((star_age BETWEEN 0 AND 16.1) OR star_age IS NULL),
+    star_brightness DOUBLE CHECK ((star_brightness BETWEEN 2.36431 AND 20.1861) OR star_brightness IS NULL)
+);
+
+CREATE TABLE Planet (
+    planet_id INT AUTO_INCREMENT PRIMARY KEY,
+    planet_name VARCHAR(255) NOT NULL UNIQUE,
+    system_id INT NOT NULL,
+    CONSTRAINT fk_planet_system
+        FOREIGN KEY (system_id)
+        REFERENCES StarSystem(system_id)
+        ON DELETE CASCADE,
+    discovery_id INT,
+    CONSTRAINT fk_planet_discovery
+        FOREIGN KEY (discovery_id)
+        REFERENCES Discovery(discovery_id)
+        ON DELETE SET NULL,
+    is_circumbinary BOOLEAN NOT NULL,
+    orbital_period DOUBLE CHECK ((orbital_period BETWEEN 0.090706293 AND 402000000) OR orbital_period IS NULL),
+    orbit_radius DOUBLE CHECK ((orbit_radius BETWEEN 0.0044 AND 19000) OR orbit_radius IS NULL),
+    radius_earth DOUBLE CHECK ((radius_earth BETWEEN 0.3098 AND 87.20586985) OR radius_earth IS NULL),
+    mass_earth DOUBLE CHECK ((mass_earth BETWEEN 0.02 AND 9534.85221) OR mass_earth IS NULL),
+    planet_density DOUBLE CHECK ((planet_density BETWEEN 0.0051 AND 2000) OR planet_density IS NULL),
+    eccentricity DOUBLE CHECK ((eccentricity BETWEEN 0 AND 0.95) OR eccentricity IS NULL),
+    insolation_flux DOUBLE CHECK ((insolation_flux BETWEEN 0.0003 AND 44900) OR insolation_flux IS NULL),
+    planet_temp DOUBLE CHECK ((planet_temp BETWEEN 34 AND 4050) OR planet_temp IS NULL),
+    ttv_obs BOOLEAN NOT NULL
+);
+```
+
+**B. Constellation Batch Ingestion (ingestConstellation.py)**
+
+The first ingestion script seeds the Constellation reference table. cursor.executemany() compiles one prepared statement and transmits all 88 row payloads in a single network operation, which is far more efficient than 88 individual execute() calls.
+
+```python
+import pandas as pd
+import mysql.connector
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+db = mysql.connector.connect(
+    host=os.getenv("MYSQL_HOST"), user=os.getenv("MYSQL_USER"),
+    password=os.getenv("MYSQL_PASSWORD"), port=int(os.getenv("MYSQL_PORT")),
+    database=os.getenv("MYSQL_DB_NAME")
+)
+cursor = db.cursor()
+df = pd.read_csv("data/Constellations.csv")
+
+query = """
+    INSERT INTO Constellation (
+        constellation_name, min_ra, max_ra, min_dec, max_dec, description, pop_rank
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+"""
+rows = []
+for index, row in df.iterrows():
+    rows.append((row['constellation_name'], row['min_ra'], row['max_ra'],
+                 row['min_dec'], row['max_dec'], row['description'], row['pop_rank']))
+
+cursor.executemany(query, rows)  # One prepared statement, 88 payloads, one round-trip
+db.commit()
+cursor.close()
+db.close()
+```
+
+**C. ETL Data Cleaning Pipeline (ingest_planets.py)**
+
+Before any data reaches the SQL engine, it passes through a three-function cleaning pipeline. This prevents CHECK constraint violations from aborting the entire ingestion batch mid-run.
+
+```python
+def clean_val(val):
+    """Convert Pandas NaN and empty strings to Python None (SQL NULL)."""
+    if pd.isna(val) or val == '' or val is None:
+        return None
+    return val
+
+def check_range(val, min_v, max_v):
+    """Validate value against the same bounds declared in the SQL CHECK constraint.
+    Returns None (SQL NULL) if the value is out of physical range."""
+    if val is None:
+        return None
+    try:
+        f_val = float(val)
+        if min_v <= f_val <= max_v:
+            return f_val
+        return None  # Reject silently — insert NULL rather than abort the batch
+    except (ValueError, TypeError):
+        return None
+
+def parse_bool(val):
+    """Normalize inconsistent CSV boolean representations to Python bool.
+    CSV may contain '1.0', '0.0', 'True', 'False', or raw integers."""
+    if val is None or pd.isna(val) or val == '':
+        return False
+    if isinstance(val, str) and val.replace('.', '', 1).isdigit():
+        return bool(int(float(val)))
+    if isinstance(val, (int, float)):
+        return bool(val)
+    return str(val).lower() == 'true'
+```
+
+Unit conversion is also applied inline before INSERT:
+
+```python
+# NASA CSV stores distance in parsecs — schema stores light years
+dist = float(dist)
+dist = round(dist * 3.26156, 6)  # 1 parsec = 3.26156 light years
+```
+
+**D. In-Memory Foreign Key Caching and ETL Hierarchy Building (ingest_planets.py)**
+
+The core ingestion loop uses two in-memory dictionaries to avoid database round-trips during foreign key resolution. The constellation cache performs spatial lookups in RAM. The system cache tracks inserted systems to prevent duplicate INSERTs.
+
+```python
+# Load all constellation bounds into RAM once — avoids 5,000 SELECT queries
+cursor.execute("SELECT constellation_id, min_ra, max_ra, min_dec, max_dec FROM Constellation")
+constellations = []
+for (cid, min_ra, max_ra, min_dec, max_dec) in cursor.fetchall():
+    constellations.append({"id": cid, "min_ra": min_ra, "max_ra": max_ra,
+                           "min_dec": min_dec, "max_dec": max_dec})
+
+system_cache = {}  # system_name -> system_id
+
+for idx, row in df.iterrows():
+    ra  = check_range(clean_val(row.get('ra_deg')),  0,   360)
+    dec = check_range(clean_val(row.get('dec_deg')), -90,  90)
+
+    # Spatial point-in-rectangle lookup executed entirely in Python RAM
+    constellation_id = None
+    if ra is not None and dec is not None:
+        for c in constellations:
+            if (c['min_ra'] <= ra <= c['max_ra']) and (c['min_dec'] <= dec <= c['max_dec']):
+                constellation_id = c['id']
+                break
+
+    # Insert StarSystem only if not already seen in this session
+    system_id = system_cache.get(system_name)
+    if not system_id:
+        cursor.execute("""
+            INSERT INTO StarSystem
+              (system_name, `ra`, `dec`, num_stars, num_planets, num_moons, distance_ly, constellation_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (system_name, ra, dec, ns, np_, nm, dist, constellation_id))
+        system_id = cursor.lastrowid       # Capture MySQL AUTO_INCREMENT value
+        system_cache[system_name] = system_id  # Cache for subsequent rows
+
+    # Insert Planet using the captured system_id as the foreign key
+    cursor.execute("""
+        INSERT INTO Planet
+          (planet_name, system_id, discovery_id, is_circumbinary,
+           orbital_period, orbit_radius, radius_earth, mass_earth,
+           planet_density, eccentricity, insolation_flux, planet_temp, ttv_obs)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (planet_name, system_id, discovery_id, is_cb,
+          p_per, p_rad, p_re, p_me, p_den, p_ecc, p_insol, p_temp, ttv))
+
+db.commit()  # Single atomic commit for all ~5,000 rows
+```
+
+**E. Five-Table LEFT JOIN with Pagination (main.py)**
+
+The Observatory API endpoint dynamically builds a SELECT across five tables. It uses ANY_VALUE() to satisfy MySQL's ONLY_FULL_GROUP_BY requirement when binary star systems produce multiple Star rows per Planet, and uses parameterized inputs throughout.
+
+```python
+cur.execute(
+    f"""
+    SELECT p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
+           p.planet_temp, p.orbit_radius, p.orbital_period,
+           p.eccentricity, p.insolation_flux,
+           s.system_id, s.system_name, s.distance_ly, s.num_planets,
+           c.constellation_name,
+           d.discovery_method, d.discovery_year,
+           ANY_VALUE(st.star_temp)        AS star_temp,
+           ANY_VALUE(st.star_radius)      AS star_radius,
+           ANY_VALUE(st.star_mass)        AS star_mass,
+           ANY_VALUE(st.star_luminosity)  AS star_luminosity
+    FROM planet p
+    LEFT JOIN starsystem   s  ON p.system_id       = s.system_id
+    LEFT JOIN constellation c  ON s.constellation_id = c.constellation_id
+    LEFT JOIN discovery    d  ON p.discovery_id    = d.discovery_id
+    LEFT JOIN star         st ON st.system_id       = s.system_id
+    {where}
+    GROUP BY p.planet_id, p.planet_name, p.radius_earth, p.mass_earth,
+             p.planet_temp, p.orbit_radius, p.orbital_period,
+             p.eccentricity, p.insolation_flux,
+             s.system_id, s.system_name, s.distance_ly, s.num_planets,
+             c.constellation_name, d.discovery_method, d.discovery_year
+    ORDER BY {order_col} IS NULL, {order_col} {order_dir}
+    LIMIT %s OFFSET %s
+    """,
+    params + [limit, offset],
+)
+```
+
+**F. System Deep-Dive Queries (main.py)**
+
+When a user opens a specific star system, three targeted queries fire using the primary key index, achieving O(log N) lookups:
+
+```python
+# Query 1: System metadata + constellation name
+cur.execute("""
+    SELECT s.*, c.constellation_name
+    FROM starsystem s
+    LEFT JOIN constellation c ON s.constellation_id = c.constellation_id
+    WHERE s.system_id = %s
+""", (system_id,))
+
+# Query 2: All host stars
+cur.execute("SELECT * FROM star WHERE system_id = %s", (system_id,))
+
+# Query 3: All planets + discovery metadata, ordered innermost-first
+cur.execute("""
+    SELECT p.*, d.discovery_year, d.discovery_method,
+           d.discovery_facility, d.discovery_telescope
+    FROM planet p
+    LEFT JOIN discovery d ON p.discovery_id = d.discovery_id
+    WHERE p.system_id = %s
+    ORDER BY p.orbital_period ASC
+""", (system_id,))
+```
+
+**G. Parameterized Search and DISTINCT Aggregation (main.py)**
+
+The system search endpoint uses LIKE pattern matching scoped with a LIMIT to prevent the engine from returning an unbounded result set when a user types a single letter. The discovery method dropdown uses SELECT DISTINCT to deduplicate at the engine level.
+
+```python
+# Substring system search — SQL injection safe via parameterization
+pattern = f"%{q}%"
+cur.execute("""
+    SELECT s.system_id, s.system_name, s.num_planets, s.distance_ly, c.constellation_name
+    FROM starsystem s
+    LEFT JOIN constellation c ON s.constellation_id = c.constellation_id
+    WHERE s.system_name LIKE %s
+    ORDER BY s.system_name
+    LIMIT 30
+""", (pattern,))
+
+# Discovery method dropdown — engine-level deduplication
+cur.execute("SELECT DISTINCT discovery_method FROM discovery ORDER BY discovery_method")
+```
+
+**H. ACID-Compliant Planet Deletion with Orphan Detection (crud.py)**
+
+The delete endpoint demonstrates explicit transactional control and programmatic referential integrity management. After deleting the planet, it updates the denormalized counter, then checks whether the system has become empty and destroys it if so.
+
+```python
+@crud_router.delete("/planets/{planet_id}")
+def delete_planet(planet_id: int):
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT system_id FROM Planet WHERE planet_id=%s", (planet_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Planet not found")
+        sys_id = row['system_id']
+
+        # Step 1 — Remove the planet
+        cur.execute("DELETE FROM Planet WHERE planet_id=%s", (planet_id,))
+
+        # Step 2 — Keep denormalized counter in sync
+        cur.execute(
+            "UPDATE StarSystem SET num_planets = num_planets - 1 WHERE system_id = %s",
+            (sys_id,)
+        )
+
+        # Step 3 — Destroy orphaned system hierarchy if no planets remain
+        cur.execute("SELECT num_planets FROM StarSystem WHERE system_id=%s", (sys_id,))
+        sys_row = cur.fetchone()
+        if sys_row and sys_row['num_planets'] <= 0:
+            cur.execute("DELETE FROM Star WHERE system_id=%s", (sys_id,))
+            cur.execute("DELETE FROM StarSystem WHERE system_id=%s", (sys_id,))
+
+        db.commit()            # Atomically persist all changes
+        return {"status": "success"}
+    except Exception as e:
+        db.rollback()          # Revert entire sequence on any failure
+        raise HTTPException(500, str(e))
+    finally:
+        cur.close()
+        db.close()             # Always release connection to prevent pool exhaustion
+```
+
+**I. Add Planet — Full Transactional INSERT Chain (crud.py)**
+
+Adding a planet involves a discovery deduplication check, an optional new system creation, a star insertion, a planet insertion, and a counter update — all within one transaction.
+
+```python
+@crud_router.post("/planets")
+def create_planet(payload: PlanetPayload):
+    db = get_db()
+    cur = db.cursor(dictionary=True)
+    try:
+        # Check if an identical Discovery record already exists
+        cur.execute("""
+            SELECT discovery_id FROM Discovery
+            WHERE discovery_year=%s AND discovery_method=%s AND discovery_locale=%s
+              AND discovery_facility=%s AND discovery_telescope=%s AND discovery_instrument=%s
+        """, (payload.discovery_year, payload.discovery_method, payload.discovery_locale,
+              payload.discovery_facility, payload.discovery_telescope, payload.discovery_instrument))
+        disc = cur.fetchone()
+        if disc:
+            discovery_id = disc['discovery_id']     # Reuse existing record
+        else:
+            cur.execute("""
+                INSERT INTO Discovery
+                  (discovery_year, discovery_method, discovery_locale,
+                   discovery_facility, discovery_telescope, discovery_instrument)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (payload.discovery_year, payload.discovery_method, payload.discovery_locale,
+                  payload.discovery_facility, payload.discovery_telescope, payload.discovery_instrument))
+            discovery_id = cur.lastrowid
+
+        sys_id = payload.system_id
+        if payload.mode == "new":
+            # Compute RA/Dec from constellation midpoint
+            cur.execute(
+                "SELECT min_ra, max_ra, min_dec, max_dec FROM Constellation WHERE constellation_id=%s",
+                (payload.constellation_id,)
+            )
+            const = cur.fetchone()
+            ra  = (const['min_ra'] + const['max_ra'])   / 2
+            dec = (const['min_dec'] + const['max_dec'])  / 2
+
+            cur.execute("""
+                INSERT INTO StarSystem
+                  (system_name, ra, `dec`, num_stars, num_planets, num_moons, distance_ly, constellation_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (payload.system_name, ra, dec, payload.num_stars,
+                  payload.num_planets, payload.num_moons, payload.distance_ly, payload.constellation_id))
+            sys_id = cur.lastrowid
+
+            cur.execute("""
+                INSERT INTO Star
+                  (star_name, system_id, spectral_type, star_temp, star_radius, star_mass,
+                   star_metallicity, star_luminosity, star_gravity, star_age, star_brightness)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (payload.star_name or payload.system_name, sys_id, payload.spectral_type,
+                  payload.star_temp, payload.star_radius, payload.star_mass, payload.star_metallicity,
+                  payload.star_luminosity, payload.star_gravity, payload.star_age, payload.star_brightness))
+
+        # Insert the planet itself
+        cur.execute("""
+            INSERT INTO Planet
+              (planet_name, system_id, discovery_id, is_circumbinary, orbital_period,
+               orbit_radius, radius_earth, mass_earth, planet_density, eccentricity,
+               insolation_flux, planet_temp, ttv_obs)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (payload.planet_name, sys_id, discovery_id, payload.is_circumbinary,
+              payload.orbital_period, payload.orbit_radius, payload.radius_earth,
+              payload.mass_earth, payload.planet_density, payload.eccentricity,
+              payload.insolation_flux, payload.planet_temp, payload.ttv_obs))
+        new_planet_id = cur.lastrowid
+
+        # Maintain denormalized counter
+        cur.execute("UPDATE StarSystem SET num_planets = num_planets + 1 WHERE system_id = %s", (sys_id,))
+
+        db.commit()
+        return {"status": "success", "planet_id": new_planet_id, "system_id": sys_id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        cur.close()
+        db.close()
+```
+
+**J. Administrative Database Reset — TRUNCATE with FK Override (crud.py)**
+
+The reset endpoint uses TRUNCATE instead of DELETE because TRUNCATE is a DDL operation that destroys and recreates tables internally, resetting AUTO_INCREMENT counters to 1 and requiring no per-row redo log entries. This makes it orders of magnitude faster than iterative DELETE for wiping thousands of rows. InnoDB normally blocks TRUNCATE on tables referenced by active foreign keys; SET FOREIGN_KEY_CHECKS = 0 overrides this at the session level.
+
+```python
+@router.post("/reset")
+def reset_db():
+    db = get_db()
+    cur = db.cursor()
+    try:
+        cur.execute("SET FOREIGN_KEY_CHECKS = 0")   # Bypass FK locks
+        cur.execute("TRUNCATE TABLE Planet")
+        cur.execute("TRUNCATE TABLE Star")
+        cur.execute("TRUNCATE TABLE StarSystem")
+        cur.execute("TRUNCATE TABLE Discovery")
+        cur.execute("TRUNCATE TABLE Constellation")
+        cur.execute("SET FOREIGN_KEY_CHECKS = 1")   # Re-engage FK enforcement
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Database truncation failed: {e}")
+    finally:
+        cur.close()
+        db.close()
+    # Re-run ingestion scripts as subprocesses after reset
+    subprocess.run([sys.executable, "backend/ingestConstellation.py"], cwd="..")
+    subprocess.run([sys.executable, "backend/ingest_planets.py"], cwd="..")
+    return {"status": "Successfully reset and re-ingested"}
+```
+
+**K. SQL Injection Prevention — Parameterized Queries**
+
+All queries across the codebase use the mysql-connector-python parameterization protocol. The %s placeholder causes the driver to send the query skeleton and data as two separate protocol messages. The server pre-compiles the query plan before it sees any user data, making SQL injection structurally impossible regardless of what text a user submits.
+
+```python
+# INSECURE (never done in this project):
+cur.execute(f"SELECT * FROM starsystem WHERE system_name LIKE '%{user_input}%'")
+
+# SECURE (used throughout):
+cur.execute("SELECT * FROM starsystem WHERE system_name LIKE %s", (f"%{user_input}%",))
+```
+
+**L. Connection Management and Security**
+
+Database credentials are loaded exclusively from a .env file via python-dotenv, never hardcoded. The .env file is git-ignored. Every request handler opens a connection at the start and closes it in a finally block, preventing connection leaks regardless of whether the request succeeded or raised an exception.
+
+```python
+def get_db():
+    host = os.getenv("MYSQL_HOST", "127.0.0.1")
+    return mysql.connector.connect(
+        host=host, user=os.getenv("MYSQL_USER", "root"),
+        password=os.getenv("MYSQL_PASSWORD", ""),
+        database=os.getenv("MYSQL_DB_NAME", "CosmosDB"),
+        port=int(os.getenv("MYSQL_PORT", "3306")),
+        connect_timeout=5,
+    )
+
+# Every handler:
+try:
+    ...
+finally:
+    cur.close()
+    db.close()  # Always released, even on exception
+```
+
+### 14. Conclusion
+
+The CosmosDB project provides a comprehensive, rigorous demonstration of advanced Relational Database Management System architecture. By actively migrating flat, highly redundant NASA CSV data into a strictly constrained MySQL 8.0 schema, the project proves the absolute mathematical necessity of Database Normalization. Achieving First Normal Form guaranteed atomic values and unique identifiers. Achieving Second Normal Form was automatic given the exclusive use of single-column surrogate primary keys, eliminating partial dependencies entirely. Achieving Third Normal Form required the careful extraction of discovery metadata into a standalone table, breaking the transitive dependency chain between telescope, facility, and planet. One deliberate 3NF exception — the num_planets denormalized counter — was accepted in exchange for superior read performance, with the cost explicitly moved to the Write path via UPDATE statements in every mutation handler.
+
+The project demonstrates complete mastery of SQL's Data Definition Language through exhaustive CHECK constraints that enforce physical laws at the storage layer, through explicit FOREIGN KEY declarations with named CONSTRAINT identifiers and precisely chosen ON DELETE CASCADE and ON DELETE SET NULL referential actions, and through the strategic use of DOUBLE precision typing to prevent coordinate drift. It demonstrates complete mastery of SQL's Data Manipulation Language through ACID-compliant transactional INSERT chains that build relational hierarchies dynamically, through parameterized UPDATE statements that maintain denormalized counters, through multi-step DELETE sequences with orphan detection, and through administrative TRUNCATE operations that navigate foreign key lock states safely.
+
+The Python ETL pipeline demonstrates that efficient database interaction requires in-memory caching strategies to minimize round-trips, two-layer validation (Python range checks before SQL CHECK constraints) to prevent batch abortions, and single-commit transactional boundaries to ensure all-or-nothing ingestion. The query layer demonstrates that the SQL engine — not the application — is the correct place to perform filtering, aggregation, sorting, and pagination on large datasets.
+
+CosmosDB is not merely a web application. It is a proof-of-concept demonstrating that strict schema design, principled normalization, referential integrity enforcement, and programmatic transactional control produce a database that is robust, scientifically accurate, and performant at scale.

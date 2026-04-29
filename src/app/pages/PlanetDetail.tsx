@@ -49,7 +49,7 @@ function calculateESIFrontEnd(planet: any, star: any) {
   
   if (esi_interior && esi_surface) {
       base_esi = Math.sqrt(esi_interior * esi_surface);
-      final_esi = is_habitable ? base_esi : base_esi * 0.1;
+      final_esi = base_esi;
   }
 
   return { star_luminosity: L, orbit_distance: d, planet_density: D, surface_temp: T, escape_velocity: V, hz_inner, hz_outer, is_habitable, esi_interior, esi_surface, base_esi, final_esi };

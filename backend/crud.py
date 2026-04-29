@@ -77,6 +77,11 @@ class PlanetPayload(BaseModel):
     is_circumbinary: bool
     ttv_obs: bool
     
+    num_stars: Optional[int] = 1
+    num_moons: Optional[int] = 0
+    num_planets: Optional[int] = 0
+    distance_ly: Optional[float] = None
+    
     orbital_period: Optional[float] = None
     orbit_radius: Optional[float] = None
     radius_earth: Optional[float] = None
@@ -138,9 +143,9 @@ def create_planet(payload: PlanetPayload):
             
             cur.execute("""
                 INSERT INTO StarSystem 
-                (system_name, ra, dec, num_stars, num_planets, num_moons, distance_ly, constellation_id)
-                VALUES (%s, %s, %s, 1, 0, 0, NULL, %s)
-            """, (payload.system_name, ra, dec, payload.constellation_id))
+                (system_name, ra, `dec`, num_stars, num_planets, num_moons, distance_ly, constellation_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (payload.system_name, ra, dec, payload.num_stars, payload.num_planets, payload.num_moons, payload.distance_ly, payload.constellation_id))
             sys_id = cur.lastrowid
             
             cur.execute("""

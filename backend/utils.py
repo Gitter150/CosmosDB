@@ -116,12 +116,7 @@ def calculate_esi(planet: dict, star: dict) -> dict:
 
     if esi_interior is not None and esi_surface is not None:
         base_esi = math.sqrt(esi_interior * esi_surface)
-
-        # Goldilocks penalty
-        if is_habitable:
-            final_esi = base_esi
-        else:
-            final_esi = base_esi * 0.1
+        final_esi = base_esi
 
     # ── Assemble result ─────────────────────────────────────────────────────
     def _r(v: float | None) -> float | None:

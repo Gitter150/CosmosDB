@@ -1,0 +1,385 @@
+====================================================
+  CosmosDB — VIVA PREPARATION SUMMARY
+  Database Management Systems — Key Concepts
+====================================================
+
+This document covers every DBMS-related concept demonstrated in the
+CosmosDB project. Study these Q&A pairs to be ready for any viva question.
+
+====================================================
+SECTION 1: RELATIONAL DATABASE FUNDAMENTALS
+====================================================
+
+Q: What is a Relational Database Management System (RDBMS)?
+A: An RDBMS is a system that stores data in structured tables (relations)
+   with rows (tuples) and columns (attributes). It enforces integrity via
+   primary keys, foreign keys, and constraints. CosmosDB uses MySQL 8.0 —
+   a full RDBMS — to store 5 interrelated entities: Constellation,
+   StarSystem, Star, Planet, and Discovery.
+
+Q: Why did you choose MySQL over a NoSQL database like MongoDB?
+A: The exoplanet data is intrinsically hierarchical and relational. A Star
+   System has multiple Stars and Planets; a Planet has one Discovery. MongoDB
+   would require embedding documents or manually managing references, with no
+   engine-level enforcement of referential integrity. MySQL enforces Foreign
+   Key constraints at the storage engine level (InnoDB), guaranteeing that
+   a Planet can never reference a non-existent StarSystem. NoSQL offers no
+   equivalent guarantee.
+
+Q: What is InnoDB and why was it required?
+A: InnoDB is MySQL's default storage engine. It is the only MySQL engine
+   that supports:
+     - Foreign Key constraints (ON DELETE CASCADE / SET NULL)
+     - Row-level locking (vs. table-level locking in MyISAM)
+     - ACID-compliant transactions (commit/rollback)
+   The legacy MyISAM engine parses foreign key syntax but silently ignores it.
+   CosmosDB explicitly requires InnoDB for all tables.
+
+====================================================
+SECTION 2: DATABASE NORMALIZATION
+====================================================
+
+Q: What is Database Normalization?
+A: Normalization is the process of structuring a relational database to
+   reduce data redundancy and prevent data anomalies (insert, update, delete).
+   CosmosDB normalizes the flat NASA CSV into 5 tables achieving up to 3NF.
+
+Q: Explain the Three Normal Forms.
+A:
+  1NF (First Normal Form):
+    - Each column holds atomic (indivisible) values.
+    - No repeating groups or arrays in columns.
+    - Every row has a unique identifier (Primary Key).
+    CosmosDB: Every table has a single INT AUTO_INCREMENT PK.
+    No multi-valued columns exist.
+
+  2NF (Second Normal Form):
+    - Must be in 1NF.
+    - No partial dependencies — every non-key attribute must depend on
+      the WHOLE primary key (matters only with composite PKs).
+    CosmosDB: All tables use single-column surrogate PKs, so partial
+    dependencies are mathematically impossible.
+
+  3NF (Third Normal Form):
+    - Must be in 2NF.
+    - No transitive dependencies — no non-key column should depend on
+      another non-key column.
+    CosmosDB: Discovery metadata (telescope → facility) was abstracted
+    into the Discovery table. Planet holds only discovery_id (a FK),
+    not the telescope name itself.
+
+Q: What was your deliberate 3NF violation and why?
+A: The StarSystem table stores num_planets as an integer column. Strictly,
+   this violates 3NF because it can be derived via:
+     SELECT COUNT(*) FROM Planet WHERE system_id = X
+   We deliberately stored it to avoid executing this costly subquery on
+   every paginated API request. This is known as controlled denormalization
+   for performance. The trade-off: every INSERT/DELETE on Planet must also
+   UPDATE StarSystem.num_planets to keep the counter synchronized.
+
+Q: What is an Update Anomaly? Give a real example from your project.
+A: An update anomaly occurs when updating one row creates inconsistency with
+   identical data in other rows. In the original flat CSV, Kepler-90's distance
+   was written on 8 separate rows (one per planet). If we updated one row's
+   distance and missed the others, queries would return 8 conflicting distances
+   for the same system. Our StarSystem table stores the distance exactly once;
+   updating it updates it universally.
+
+Q: What is an Insert Anomaly?
+A: An insert anomaly is the inability to add data without being forced to add
+   unrelated data. In a flat table, you couldn't record a newly discovered Star
+   System without also having at least one Planet to go with it. In CosmosDB,
+   StarSystem is its own independent table — you can insert a system with zero
+   confirmed planets.
+
+Q: What is a Delete Anomaly?
+A: A delete anomaly is the accidental loss of unintended data when deleting a
+   row. In a flat table, deleting the last planet of a system would also destroy
+   the only record of that system's existence. CosmosDB separates the concern —
+   deleting a Planet row never destroys the StarSystem row.
+
+====================================================
+SECTION 3: PRIMARY KEYS, FOREIGN KEYS, CONSTRAINTS
+====================================================
+
+Q: What is a Primary Key? Why did you use AUTO_INCREMENT?
+A: A Primary Key uniquely identifies every row in a table. It cannot be NULL
+   and must be unique. We use INT AUTO_INCREMENT because:
+     - The database engine generates unique IDs automatically.
+     - An integer key is 4 bytes — the smallest possible index size.
+     - InnoDB physically clusters the rows by this key in a B-Tree,
+       making PK-based lookups O(log N).
+
+Q: What is a Foreign Key?
+A: A Foreign Key is a column in one table that references the Primary Key in
+   another table. It enforces referential integrity — you cannot insert a
+   value in the FK column that doesn't exist as a PK in the parent table.
+   For example: Planet.system_id must match an existing StarSystem.system_id.
+
+Q: What is ON DELETE CASCADE?
+A: If a parent row is deleted, all child rows referencing it are automatically
+   deleted by the engine. In CosmosDB:
+     StarSystem → Star (ON DELETE CASCADE)
+     StarSystem → Planet (ON DELETE CASCADE)
+   Deleting the StarSystem "Kepler-90" automatically deletes all its stars and
+   planets. No orphaned rows can exist.
+
+Q: What is ON DELETE SET NULL?
+A: If the parent row is deleted, the FK column in child rows is set to NULL
+   rather than deleting the child. In CosmosDB:
+     Planet.discovery_id → ON DELETE SET NULL
+   If a Discovery record is removed, the planet survives with discovery_id=NULL.
+   Physical science data is preserved; only the historical tag is lost.
+
+Q: What are CHECK constraints?
+A: CHECK constraints restrict the range of values that can be inserted into a
+   column. MySQL 8.0.16+ enforces them at the engine level. Examples:
+     CHECK (ra BETWEEN 0 AND 360)
+     CHECK (star_temp BETWEEN 415 AND 57000)
+     CHECK (radius_earth BETWEEN 0.3098 AND 87.2058)
+   Any INSERT or UPDATE violating these is rejected with an error,
+   regardless of which application sent the query.
+
+Q: Why did you use UNIQUE constraint on planet_name?
+A: Because the same planet cannot be discovered twice. The UNIQUE constraint
+   prevents duplicate planet_name values from being inserted. MySQL creates a
+   secondary B-Tree index for UNIQUE columns automatically, making lookups
+   on planet_name O(log N) as well.
+
+Q: What is the difference between UNIQUE and PRIMARY KEY?
+A: A PRIMARY KEY is always UNIQUE and NOT NULL. A table can have only one PK.
+   A UNIQUE constraint allows NULLs (multiple NULL values are permitted in
+   most RDBMS) and a table can have multiple UNIQUE constraints. In CosmosDB,
+   system_name and planet_name both have UNIQUE constraints in addition to
+   the surrogate integer PKs.
+
+Q: Why did you name your CONSTRAINT identifiers explicitly?
+A: Named constraints (e.g., CONSTRAINT fk_planet_system FOREIGN KEY ...)
+   appear in MySQL error messages when violations occur, making debugging
+   faster. They also allow targeted ALTER TABLE ... DROP FOREIGN KEY commands
+   without rebuilding the entire table.
+
+====================================================
+SECTION 4: SQL — DDL, DML, QUERIES
+====================================================
+
+Q: What is DDL? What DDL commands did you use?
+A: DDL (Data Definition Language) defines the structure of the database.
+   Commands used: CREATE TABLE (to define all 5 tables with constraints).
+   Additional DDL used: TRUNCATE TABLE (during database reset, which drops
+   and recreates the table structure internally, resetting AUTO_INCREMENT).
+
+Q: What is DML? What DML commands did you use?
+A: DML (Data Manipulation Language) operates on the data inside tables.
+   Commands used:
+     INSERT — seed constellations, systems, stars, planets, discoveries.
+     UPDATE — maintain num_planets counter and edit entity attributes.
+     DELETE — remove specific planets and orphaned systems.
+     SELECT — all data retrieval queries for the API and frontend.
+
+Q: Explain LEFT JOIN. Why did you use it instead of INNER JOIN?
+A: INNER JOIN only returns rows where a matching record exists in BOTH tables.
+   LEFT JOIN returns ALL rows from the left table, even if no matching row
+   exists in the right table (the right side columns return NULL).
+   We use LEFT JOIN because some planets have NULL discovery_id or NULL
+   constellation. An INNER JOIN would silently exclude these planets from
+   results, giving the user an incomplete view of the database.
+
+Q: What is GROUP BY and why was ANY_VALUE() needed?
+A: GROUP BY aggregates rows sharing the same value into a single output row.
+   MySQL's ONLY_FULL_GROUP_BY mode requires that every column in the SELECT
+   list either appears in the GROUP BY clause or is wrapped in an aggregate
+   function (SUM, COUNT, MAX, etc.). When joining Planet → Star, a system with
+   multiple stars would produce multiple rows per planet. We group by planet_id
+   and use ANY_VALUE(st.star_temp) to tell the engine: "take any one star's
+   temperature — we don't care which one." This avoids listing every star
+   column in the GROUP BY.
+
+Q: What is LIMIT and OFFSET used for?
+A: LIMIT restricts the number of rows returned. OFFSET skips the first N rows.
+   Together they implement pagination:
+     Page 1: LIMIT 50 OFFSET 0
+     Page 2: LIMIT 50 OFFSET 50
+   The SQL engine scans only the rows required for the current page,
+   never loading the full 5,000-row dataset into memory.
+
+Q: What is SELECT DISTINCT? Where did you use it?
+A: DISTINCT removes duplicate rows from the result set. We use it to populate
+   the discovery method filter dropdown:
+     SELECT DISTINCT discovery_method FROM discovery ORDER BY discovery_method;
+   This returns one row per unique method (Transit, Radial Velocity, etc.)
+   without any Python-side deduplication.
+
+Q: What is TRUNCATE and how does it differ from DELETE?
+A: DELETE removes rows one at a time and logs each deletion in the redo log.
+   TRUNCATE is a DDL operation — it destroys and recreates the table internally,
+   resetting AUTO_INCREMENT to 1. It is far faster for wiping entire tables.
+   However, TRUNCATE is blocked by foreign key constraints. Our reset script
+   disables checks first: SET FOREIGN_KEY_CHECKS = 0.
+
+====================================================
+SECTION 5: TRANSACTIONS AND ACID PROPERTIES
+====================================================
+
+Q: What are ACID properties?
+A: ACID stands for:
+  - Atomicity: A transaction either fully succeeds or fully fails.
+    No partial state is ever committed.
+  - Consistency: The database moves from one valid state to another.
+    All constraints remain satisfied after the transaction.
+  - Isolation: Concurrent transactions do not interfere with each other.
+    InnoDB uses row-level locking to achieve this.
+  - Durability: Once committed, data survives system crashes.
+    InnoDB writes to a redo log before committing.
+
+Q: How did you implement Atomicity in your CRUD operations?
+A: Every mutation in crud.py wraps multiple SQL statements in a try-except block.
+     try:
+       cur.execute("DELETE FROM Planet WHERE planet_id=%s", ...)
+       cur.execute("UPDATE StarSystem SET num_planets = num_planets - 1 ...")
+       db.commit()
+     except Exception as e:
+       db.rollback()
+   If the DELETE succeeds but the UPDATE fails (e.g., constraint error),
+   db.rollback() fires and the DELETE is also reversed. The database never
+   sits in a half-modified state.
+
+Q: What is a database transaction?
+A: A transaction is a sequence of one or more SQL operations treated as a
+   single logical unit. It begins implicitly when a connection executes a DML
+   statement and ends with COMMIT (persist) or ROLLBACK (undo).
+
+====================================================
+SECTION 6: INDEXING AND PERFORMANCE
+====================================================
+
+Q: What is a B-Tree Index and how does MySQL use it?
+A: A B-Tree (Balanced Tree) is a self-balancing data structure where every
+   lookup, insert, and delete executes in O(log N) time. MySQL's InnoDB
+   engine clusters the physical rows of each table in a Primary B-Tree Index
+   sorted by the primary key. This means fetching a row by PK requires only
+   log2(5000) ≈ 12 comparisons, not a full table scan.
+
+Q: What indexes exist automatically in your schema?
+A: MySQL creates B-Tree indexes automatically for:
+     - Every PRIMARY KEY column (clustered index)
+     - Every UNIQUE constraint column (secondary unique index)
+     - Every FOREIGN KEY column (secondary index for JOIN performance)
+   This means planet_id, planet_name, system_id (on Planet), discovery_id (on
+   Planet), system_id (on Star) all have automatic indexes. LEFT JOINs on these
+   columns are resolved in O(log N), not O(N).
+
+Q: Why did you choose DOUBLE over FLOAT for coordinates?
+A: FLOAT (4 bytes) provides ~7 decimal digits of precision.
+   DOUBLE (8 bytes) provides ~15 decimal digits of precision.
+   Celestial coordinates like Right Ascension and Declination require high
+   precision to correctly map stars to constellations via spatial lookups.
+   FLOAT precision drift would cause nearby stars to be misassigned to the
+   wrong constellation after repeated arithmetic operations.
+
+====================================================
+SECTION 7: ETL AND DATA ENGINEERING
+====================================================
+
+Q: What is ETL?
+A: Extract, Transform, Load.
+  - Extract: Read raw data from the NASA CSV using Pandas.
+  - Transform: Clean NaN values, validate ranges, convert units,
+    parse booleans, resolve foreign key mappings.
+  - Load: Execute parameterized INSERT statements into MySQL.
+
+Q: How did you avoid inserting 5,000 duplicate StarSystem rows?
+A: We maintain a Python dictionary: system_cache = { system_name: system_id }.
+   Before inserting a StarSystem, we check the cache. If the system name is
+   already in the dictionary, we skip the INSERT and reuse the cached ID.
+   This is the in-memory deduplication strategy, replacing what would otherwise
+   be 5,000 SELECT queries with 0 additional database reads.
+
+Q: What is cursor.lastrowid and why is it important?
+A: After an INSERT statement, cursor.lastrowid returns the value of the
+   AUTO_INCREMENT primary key generated by MySQL for that row. We use this
+   immediately as the system_id foreign key in the subsequent Planet INSERT,
+   chaining the hierarchy without a second SELECT query.
+
+Q: What is cursor.executemany() and why is it better?
+A: executemany(query, list_of_tuples) compiles the SQL query once as a
+   prepared statement and then sends all the data rows in a single network
+   operation. Compared to calling execute() 88 times in a loop, it reduces
+   network round-trips from 88 to 1, which is a massive performance gain.
+
+Q: Why did you validate ranges in Python before inserting into MySQL?
+A: If a row with an out-of-range value (e.g., planet_temp = -999) reaches MySQL,
+   the CHECK constraint raises an error that aborts the entire current batch
+   INSERT. To prevent one bad row from killing the ingestion of thousands of
+   good rows, Python pre-validates every value against the same bounds and
+   substitutes NULL for any rejected value before the INSERT fires.
+
+====================================================
+SECTION 8: SECURITY
+====================================================
+
+Q: How did you prevent SQL Injection?
+A: Using parameterized queries with mysql-connector-python:
+     cur.execute("SELECT * FROM starsystem WHERE system_name LIKE %s", (pattern,))
+   The driver sends the query structure and the parameter value as separate
+   network messages. The MySQL server pre-compiles the query plan before it
+   ever sees the user-supplied value. User input is treated strictly as a
+   string literal — SQL keywords inside it cannot alter the query structure.
+
+Q: How did you secure the database credentials?
+A: Credentials are stored in a .env file that is excluded from version control
+   via .gitignore. At runtime, python-dotenv loads them into environment
+   variables. No hardcoded passwords appear in any Python source file.
+
+Q: How did you prevent connection leaks?
+A: Every function that opens a database connection uses a finally block to
+   ensure cur.close() and db.close() are called even if an exception occurs.
+   This returns the connection to MySQL's pool and prevents resource exhaustion.
+
+====================================================
+SECTION 9: COMMON VIVA QUESTIONS (RAPID FIRE)
+====================================================
+
+Q: What is a surrogate key?
+A: An artificial PK with no real-world meaning — just an auto-incremented int.
+   Easier to index and join than composite natural keys.
+
+Q: What is referential integrity?
+A: The guarantee that every FK value in a child table matches a PK value in the
+   parent table. MySQL InnoDB enforces this at the engine level.
+
+Q: What is a NULL in SQL?
+A: NULL represents an unknown or missing value. It is not zero, not an empty
+   string. CHECK constraints in CosmosDB use: (column > 0 OR column IS NULL)
+   to allow NULLs while still validating non-null values.
+
+Q: What is the difference between WHERE and HAVING?
+A: WHERE filters rows BEFORE grouping. HAVING filters groups AFTER GROUP BY.
+   We use WHERE for planet/system filters and GROUP BY + ANY_VALUE for
+   aggregation — HAVING was not required in our queries.
+
+Q: What is a prepared statement?
+A: A SQL template compiled once by the server, then executed multiple times
+   with different parameter values. Faster for repeated queries and immune to
+   SQL injection. mysql-connector-python uses them automatically with %s.
+
+Q: What is the difference between COMMIT and ROLLBACK?
+A: COMMIT permanently writes all changes in the current transaction to disk.
+   ROLLBACK reverses all changes since the last COMMIT, restoring the database
+   to its previous valid state.
+
+Q: How many rows does your database have approximately?
+A: 5,000+ planets, ~4,500 star systems, ~4,500 stars, 88 constellations,
+   and several hundred unique discovery records.
+
+Q: Can you explain the 5 tables in one sentence each?
+A:
+  Constellation: Defines the 88 sky regions by coordinate bounds.
+  StarSystem: The gravitational hub; stores system name, coordinates, distance.
+  Star: Physical properties of the host star(s) belonging to a system.
+  Discovery: Historical metadata — when, where, and how a planet was found.
+  Planet: Physical and orbital properties of the exoplanet, linking system+discovery.
+
+====================================================
+END OF VIVA SUMMARY
+====================================================

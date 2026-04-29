@@ -47,6 +47,10 @@ export default function AddPlanet() {
     planet_name: "",
     is_circumbinary: false,
     ttv_obs: false,
+    num_stars: 1,
+    num_moons: 0,
+    num_planets: 0,
+    distance_ly: "",
     orbital_period: "",
     orbit_radius: "",
     radius_earth: "",
@@ -107,6 +111,10 @@ export default function AddPlanet() {
         ...form,
         system_id: mode === "existing" ? selectedSystem.system_id : undefined,
         constellation_id: mode === "new" ? parseInt(form.constellation_id) || undefined : undefined,
+        num_stars: mode === "new" ? parseInt(form.num_stars) || 1 : undefined,
+        num_moons: mode === "new" ? parseInt(form.num_moons) || 0 : undefined,
+        num_planets: mode === "new" ? parseInt(form.num_planets) || 0 : undefined,
+        distance_ly: mode === "new" ? parseFloat(form.distance_ly) || null : undefined,
         orbital_period: parseFloat(form.orbital_period) || null,
         orbit_radius: parseFloat(form.orbit_radius) || null,
         radius_earth: parseFloat(form.radius_earth) || null,
@@ -162,8 +170,8 @@ export default function AddPlanet() {
 
         {/* Mode Toggles */}
         <div className="flex bg-white/[0.03] border border-white/[0.08] rounded-full p-1.5 mb-12 shadow-2xl backdrop-blur-xl">
-           <button className={`px-8 py-2.5 rounded-full text-[11px] tracking-[0.2em] uppercase transition-all duration-500 ease-out cursor-pointer ${mode === "new" ? "bg-gradient-to-r from-amber-500/80 to-orange-500/80 text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] font-medium" : "text-white/40 hover:text-white/80"}`} onClick={() => setMode("new")}>Mode B: New System</button>
            <button className={`px-8 py-2.5 rounded-full text-[11px] tracking-[0.2em] uppercase transition-all duration-500 ease-out cursor-pointer ${mode === "existing" ? "bg-gradient-to-r from-emerald-500/80 to-teal-500/80 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)] font-medium" : "text-white/40 hover:text-white/80"}`} onClick={() => setMode("existing")}>Mode A: Existing System</button>
+           <button className={`px-8 py-2.5 rounded-full text-[11px] tracking-[0.2em] uppercase transition-all duration-500 ease-out cursor-pointer ${mode === "new" ? "bg-gradient-to-r from-amber-500/80 to-orange-500/80 text-white shadow-[0_0_20px_rgba(245,158,11,0.3)] font-medium" : "text-white/40 hover:text-white/80"}`} onClick={() => setMode("new")}>Mode B: New System</button>
         </div>
 
         <div className="w-full space-y-10">
@@ -233,6 +241,10 @@ export default function AddPlanet() {
                           {constellations.map(c => <option key={c.constellation_id} value={c.constellation_id} className="bg-[#111]">{c.constellation_name}</option>)}
                       </select>
                     </div>
+                    {renderField("Num Stars", "num_stars")}
+                    {renderField("Num Moons", "num_moons")}
+                    {renderField("Num Planets", "num_planets")}
+                    {renderField("Distance (ly)", "distance_ly")}
                  </div>
 
                  <div className="py-6 border-t border-white/[0.06] border-b mb-4">

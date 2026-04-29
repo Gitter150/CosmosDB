@@ -103,10 +103,10 @@ def list_constellations():
     cur = db.cursor(dictionary=True)
     cur.execute(
         """
-        SELECT c.constellation_id, c.constellation_name, COUNT(s.system_id) AS system_count
+        SELECT MIN(c.constellation_id) AS constellation_id, c.constellation_name, SUM(CASE WHEN s.system_id IS NOT NULL THEN 1 ELSE 0 END) AS system_count
         FROM constellation c
         LEFT JOIN starsystem s ON s.constellation_id = c.constellation_id
-        GROUP BY c.constellation_id, c.constellation_name
+        GROUP BY c.constellation_name
         ORDER BY c.constellation_name
         """
     )

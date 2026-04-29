@@ -1,0 +1,228 @@
+====================================================
+  CosmosDB — PROJECT DEMO SCRIPT
+  Duration: 10-15 Minutes  |  3 Presenters
+====================================================
+
+ROLES
+  Person A — Navigator / Main Presenter (controls the screen)
+  Person B — Database Expert (explains SQL and schema concepts)
+  Person C — Code Explainer (walks through Python-SQL integration)
+
+====================================================
+SEGMENT 1 — INTRODUCTION (Person A)  [~2 minutes]
+====================================================
+
+[ACTION: Open browser at http://localhost:5173/]
+
+"Good [morning/afternoon]. Our project is CosmosDB — an Exoplanet Explorer
+and Orbit Visualizer backed by a fully normalized MySQL 8.0 relational
+database.
+
+The core problem we solved: the NASA Exoplanet Archive distributes data as
+a single flat CSV. One row contains a planet, its host star, its system
+coordinates, and the telescope that found it — all mixed together. That
+creates catastrophic data duplication. If Kepler-90 has 8 planets, the
+string 'Kepler-90', its coordinates, and its distance are repeated 8 times
+on disk. Any correction requires updating all 8 rows manually. Miss one,
+and you have conflicting data — an update anomaly.
+
+Our solution was to normalize this data into 5 hierarchical SQL tables:
+  1. Constellation
+  2. StarSystem
+  3. Star
+  4. Planet
+  5. Discovery
+
+The application you see on screen is querying this live MySQL database in
+real time through a Python FastAPI backend."
+
+====================================================
+SEGMENT 2 — DATABASE SCHEMA (Person B)  [~3 minutes]
+====================================================
+
+[ACTION: Show SQL/schema.sql on screen]
+
+"Let me walk through the schema design.
+
+We have 5 tables in a strict hierarchy. At the top: Constellation, which
+stores the 88 regions of the sky defined by coordinate bounds.
+
+StarSystem is the central hub. Every Star and Planet belongs to a system.
+This is where normalization eliminates the duplication — Kepler-90's
+distance is stored exactly once here.
+
+Star stores the host star's spectroscopic properties — temperature, mass,
+radius, luminosity, age.
+
+Discovery is an isolated table for historical metadata: year found, method
+used, telescope and facility. If 3,000 planets were all found by Kepler
+using the Transit method, those strings are written to disk ONCE in this
+table, not 3,000 times.
+
+Planet is the most constrained table. It has two foreign keys — one to
+StarSystem, one to Discovery.
+
+Every table uses an INT AUTO_INCREMENT primary key. InnoDB clusters the
+physical rows around this key using a B-Tree index. Every foreign key
+declaration also generates a secondary B-Tree index automatically. This
+is why our JOIN queries on 5 tables still execute in milliseconds.
+
+The foreign key constraints carry specific referential actions:
+  - Planet.system_id → ON DELETE CASCADE
+    If a system is deleted, all its planets and stars are automatically
+    destroyed. No orphans.
+  - Planet.discovery_id → ON DELETE SET NULL
+    If a Discovery record is removed, the planet survives but loses its
+    historical tag. Physical data is preserved.
+
+We also use CHECK constraints to enforce physical laws at the disk level:
+  CHECK (radius_earth BETWEEN 0.3098 AND 87.2058)
+  CHECK (star_temp BETWEEN 415 AND 57000)
+  CHECK (orbital_period BETWEEN 0.09 AND 402000000)
+
+Even if someone bypasses the Python API and opens a MySQL shell, these
+constraints will reject impossible data. The SQL engine IS the validator."
+
+====================================================
+SEGMENT 3 — LIVE DEMO: OBSERVATORY (Person A)  [~2 minutes]
+====================================================
+
+[ACTION: Interact with the Observatory tab in the browser]
+
+"This is the Observatory — a paginated grid of planets. Each page shows 50.
+
+The SQL driving this uses LIMIT and OFFSET:
+  LIMIT 50 OFFSET 0  (page 1)
+  LIMIT 50 OFFSET 50 (page 2)
+
+The engine only touches the rows we actually need.
+
+[TYPE 'Kepler' in the search box]
+
+Searching fires a WHERE clause:
+  WHERE system_name LIKE '%Kepler%'
+
+MySQL resolves this using the B-Tree index on system_name. Instant.
+
+[USE the Discovery Method filter dropdown — select 'Transit']
+
+Filters add additional WHERE conditions to the same SQL query. Python
+builds the WHERE clause dynamically based on what the user selects,
+using parameterized %s placeholders to prevent SQL injection."
+
+====================================================
+SEGMENT 4 — LIVE DEMO: ORBIT VISUALIZER (Person A)  [~2 minutes]
+====================================================
+
+[ACTION: Click on any star system card]
+
+"Clicking a system opens the deep-dive view — the Orbit Visualizer.
+
+Three targeted SQL queries fire immediately using the system_id primary key:
+  1. SELECT system metadata joined with its constellation name.
+  2. SELECT all stars in the system.
+  3. SELECT all planets joined with discovery data,
+     ORDER BY orbital_period ASC — so planets render innermost-first.
+
+[POINT TO the orbiting planets]
+
+Everything visual is data-driven. Orbit radius, eccentricity, planet
+temperature — all pulled from MySQL. The frontend is purely a window
+into the database."
+
+====================================================
+SEGMENT 5 — ETL PIPELINE (Person C)  [~2 minutes]
+====================================================
+
+[ACTION: Open backend/ingest_planets.py in an editor]
+
+"The 5,000 planets got into this database via our ETL script.
+
+Step 1 — Extract & Clean:
+  We load the CSV with Pandas. Every NaN becomes Python None, which
+  the MySQL driver maps to SQL NULL. Every numerical value passes
+  through a check_range() function that validates it against the
+  same bounds we declared in the schema CHECK constraints. This
+  prevents constraint violations from aborting the entire batch.
+
+Step 2 — In-Memory Cache:
+  We query Constellation once, load all 88 records into a Python
+  dictionary, then perform spatial lookups IN RAM to assign each
+  star system its constellation_id. This replaces 5,000 database
+  queries with 0 database queries.
+
+Step 3 — Insert hierarchy:
+  For each CSV row, we insert the StarSystem first, then capture
+  cursor.lastrowid — MySQL's auto-generated primary key. We use
+  that integer directly as the system_id foreign key in the Planet
+  INSERT. No extra SELECT needed.
+
+Step 4 — Single commit:
+  One db.commit() at the very end writes everything atomically.
+  If anything fails, db.rollback() cleans up completely."
+
+====================================================
+SEGMENT 6 — NORMALIZATION & TRANSACTIONS (Person B)  [~1 minute]
+====================================================
+
+[ACTION: No screen change needed — speak directly]
+
+"To summarize normalization formally:
+
+1NF: Atomic values, no repeating groups, unique PKs everywhere. Achieved.
+
+2NF: No partial dependencies. Because we use single-column surrogate
+     keys, partial dependencies are mathematically impossible. Achieved.
+
+3NF: No transitive dependencies. Discovery metadata — telescope
+     depending on facility — was abstracted out into its own table.
+     Achieved with one deliberate exception:
+
+The num_planets column on StarSystem technically violates 3NF because
+it can be derived from counting Planet rows. We store it explicitly
+for performance — avoiding COUNT subqueries on every page load.
+When a planet is added or deleted, Python fires an additional UPDATE
+to keep this counter in sync. Cost is moved from reads to writes.
+
+On transactions: every mutation in crud.py wraps multiple SQL
+statements in a try-except. If any statement fails, db.rollback()
+fires. Only when all statements succeed does db.commit() write to disk.
+That's ACID compliance — Atomicity specifically."
+
+====================================================
+SEGMENT 7 — ADMIN CRUD (Person C)  [~1 minute]
+====================================================
+
+[ACTION: Open the Add Planet form in the UI]
+
+"The admin panel lets us add, edit, and delete planets live.
+
+Adding a planet fires a 3-step transaction:
+  1. Check if a matching Discovery record exists. If not, INSERT one.
+  2. INSERT into Planet with the FK from step 1.
+  3. UPDATE StarSystem num_planets = num_planets + 1.
+
+Deleting a planet is even more interesting:
+  1. DELETE FROM Planet.
+  2. UPDATE StarSystem num_planets = num_planets - 1.
+  3. Check if num_planets == 0. If yes, DELETE the Star and StarSystem.
+     The system is orphaned — no point keeping it.
+
+All wrapped in try-except with rollback on failure."
+
+====================================================
+CLOSING (Person A)  [~30 seconds]
+====================================================
+
+"To summarize — CosmosDB demonstrates the complete RDBMS lifecycle:
+schema design with normalization and constraints, high-performance ETL
+ingestion with in-memory caching, complex multi-table JOIN queries with
+pagination, and transactionally safe CRUD mutations.
+
+The SQL engine is the heart of this application. Everything else serves it.
+
+Thank you. We're ready for questions."
+
+====================================================
+END OF DEMO SCRIPT
+====================================================
